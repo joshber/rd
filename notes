@@ -1,0 +1,110 @@
+// Nomenclature
+// filter = the first shader, the one that renders the reaction-diffusion lattice
+// convolver = the second shader, the one that applies the kernel to video frame data
+
+// TODO
+// What to implement:
+// Scott-Gray -- feed and removal rates varying across image AND by sound
+// diffusion rates varying by sound ... along with timestep
+// FitzHugh–Nagumo https://en.wikipedia.org/wiki/FitzHugh%E2%80%93Nagumo_model
+
+PImage fBuf;
+PShader shader0, shader1, shaderN;
+
+void setup() {
+// Populate the filter buffer, say with Perlin noise or something derived by sampling ambient audio or whatever
+  fBuf = createImage( width, height, ARGB /* or RGB? */ );
+  fBuf.loadPixels()
+  for ( int i = 0 ; i < width * height ; ++i ) {
+    fBuf.pixels[ i ] = color( /* green for one reagent, blue for the other */... );
+  }
+  fBuf.updatePixels()
+}
+
+// TODO: NIX pipeline()
+// Encapsulates a multistage pixel shader, copying output to a buffer to be passed to the next stage
+void pipeline( PShader s, PImage b ) {
+  s.set( "inbuf", b ); // Pass the input buffer as a sampler2d
+
+  shader( s );
+  rect( 0, 0, width, height ); // s outputs to toplevel pixels[]
+
+  // FIXME: Would PImage::copy() do what I want?
+  //b.copy( 0, 0, width, height, 0, 0, width, height );
+    // NO! PImage::copy() with no source arg simply copies from an image to itself (i.e., for transposing regions)
+
+  // Make sure pixels[] arrays are accessible
+  loadPixels();
+  b.loadPixels();
+
+  // Copy toplevel pixels[] into the pipeline buffer
+  for ( int i = 0 ; i < width * height ; ++i ) {
+    b.pixels[ i ] = pixels[ i ];
+  }
+  b.updatePixels();
+}
+
+void draw() {
+// The problem: How do we get the filter shader's output back into the filter buffer?
+// One idea -- Check this on the Processing forums / StackExchange !
+
+  background( 0. ); // clear the viewport
+
+  // Get diffusion rates for fShader from audio in
+  // envelopeFollower() ... make one rate proportional to amplitude? logistic of amplitude? loudness?
+  // Possibly reload shaderN
+
+  // TODO: Encapsulate the following so it can be applied multiple times,
+  // as for a two-pass blur/sum for McCabe's technique
+
+  shader0.set( "inbuf", fbuf ); // pass the filter buffer as a sampler2d
+  shader( shader0 );
+  rect( 0, 0, width, height ); // fShader outputs to toplevel pixels[]
+    // FIXME: Will this cause flicker?
+
+  // Make sure pixels[] arrays are accessible
+  loadPixels();
+  fBuf.loadPixels();
+
+  // Copy toplevel pixels[] into the filter buffer
+  for ( int i = 0 ; i < width * height; ++i ) {
+    fBuf.pixels[ i ] = pixels[ i ];
+  }
+  fBuf.updatePixels();
+
+  // Final shader convolves the filter with a video frame
+  // and applies any aftereffects -- glitch, compression artifact, etc
+  shaderN.set( "filter", fbuf );
+  shaderN.set( "frame", vbuf );
+  shader( shaderN );
+  rect( 0, 0, width, height );
+}
+
+// TODO: Another thought: Would I be better off using a PGraphics, which is designed for off-screen rendering?
+// https://processing.org/reference/PGraphics.html
+// https://forum.processing.org/two/discussion/3782/how-to-build-pimage-objects-to-a-buffer-programatically
+TODO: Experiment with PGraphics--
+Is it possible that PGraphics::beginDraw() would allow me to shift the shader to the PGraphics object?
+OR, do I even need beginDraw() --
+If shader() sets the shader for all drawing, it should affect a rect(), e.g., on any PGraphics
+So I could simply render everything to a "back buffer" PGraphics, then pass it to the final shader for onscreen rendering
+USE beginDraw() and endDraw() -- it's canonical https://processing.org/examples/creategraphics.html
+REMEMBER noStroke()
+(actually, do we need it, since we're using a custom shader?)
+WAIT: Will beginDraw() and endDraw() make the buffer memoryless from frame to frame?
+PGraphics extends PImage, so we can simply use loadPixels() and pixels[] derefs
+
+https://processing.org/reference/PGraphics_endDraw_.html
+Looks like we need a single fbuf.beginDraw() in setup(), but no endDraw() -- we're not showing on screen
+
+and since PGraphics isa PImage, we should be able to pass it through to the shader same as with a PImage:
+
+// would I need fbuf.endDraw() to make sure fbuf.pixels[] is up to date before passing to the shader?
+shader0.set( "inbuf", fbuf );
+shader( shader0 );
+fbuf.rect( 0, 0, width, height );
+// ?? fbuf.updatePixels(); ??
+
+Multilevel: Use the z and w terms of the sampler to represent a higher level, created operating on Gaussian averages of radius N
+
+IMPORTANT: Use 9-point stencil for Laplace
