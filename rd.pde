@@ -4,18 +4,16 @@
 // 2016 CC BY-NC-ND 4.0
 
 // FIXME TODO
-// FIXME SEED THE GRID -- FROM AN IMAGE
 // http://www.karlsims.com/rd.html
 // Some typical values used, for those interested, are: DA=1.0, DB=.5, f=.055, k=.062
 // (f and k vary for different behaviors), and Δt=1.0. The Laplacian is performed with a
 // 3x3 convolution with center weight -1, adjacent neighbors .2, and diagonals .05.
 // The grid is initialized with A=1, B=0, and a small area is seeded with B=1.
 
-// FIXME DON'T PASS ANYTHING TO THE SHADERS --
-// Handle all modification to parameters inside the shader. Just pass the frequency spectrum as a texture
-
 // - Relationship between pixels[] and sampler2D might not be what you think -- bit order reversed?
 // - TEST the hypothesis that a PGraphics won't work as the buffer -- doesn't sound right
+
+// TODO LATER
 // - Two-level Gray-Scott -- 10-20px and then 1px
 // - Beads and API compliance? Switch to PSound? Investigate PSound API
 
@@ -42,12 +40,12 @@ float overlayFontSize = 12.;
 
 
 void setup() {
-  size( 1192, 1080, P2D );
+  size( 1280, 720, P2D );
   //fullScreen( P2D, 1 ); // TODO: Try FX2D renderer
   //pixelDensity( 2 );
 
   colorMode( HSB, 1. ); // TODO: HSB, 2pi, 1., 1.?
-  frameRate( 60. );
+  frameRate( 60 );
 
   background( 0. );
   noStroke();
@@ -56,13 +54,7 @@ void setup() {
   loadKernelShader();
   loadConvolverShader();
 
-  // FIXME FIXME TODO LOAD SEED KERNEL FROM IMAGE
-  kBuf = createImage( width, height, RGB );
-  kBuf.loadPixels();
-  for ( int i = 0 ; i < kWidth * kHeight ; ++i ) {
-    kBuf.pixels[ i ] = color( 1., 1., 0. );
-  }
-  kBuf.updatePixels();
+  kBuf = loadImage( "seeds/seed 4.jpg" );
 
   //
   // Set up audio in and analyzer

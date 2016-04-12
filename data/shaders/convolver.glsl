@@ -28,8 +28,8 @@ uniform vec2 res; // viewport dimensions in pixels
 
 vec3 rgb2hsb( vec3 c ) {
     vec4 K = vec4( 0., -1. / 3., 2. / 3., -1. ) ;
-    vec4 p = mix( vec4( c.bg, K.wz ), vec4( c.gb, K.xy ), step( c.b, c.g ) );
-    vec4 q = mix( vec4( p.xyw, c.r ), vec4( c.r, p.yzx ), step( p.x, c.r ) );
+    vec4 p = c.g < c.b ? vec4( c.bg, K.wz ) : vec4( c.gb, K.xy );
+    vec4 q = c.r < p.x ? vec4( p.xyw, c.r ) : vec4( c.r, p.yzx );
 
     float d = q.x - min( q.w, q.y );
     float e = 1.e-10;
@@ -48,10 +48,10 @@ vec3 hsb2rgb( vec3 c ) {
 
 void main() {
   vec2 uv = gl_FragCoord.xy / res;
-  vec2 p = vec2( uv.x, 1. - uv.y ); // Processing y-axis is inverted TODO: TEST!
+  uv.y = 1. - uv.y; // Processing inverts y-axis
 
-  vec3 c = rgb2hsb( texture2D( frame, p ).rgb );
-  vec2 f = texture2D( kernel, uv / scale ).xy;
+  vec2 f = texture2D( kernel, uv.xy ).xy;
+  vec3 c = rgb2hsb( texture2D( frame, uv ).rgb );
 
   // TODO: Experiment with different ways of applying the kernel
   // - Rescale f, e.g. [-1,1]
