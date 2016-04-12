@@ -5,80 +5,91 @@ precision mediump int;
 
 #define PROCESSING_COLOR_SHADER
 
-// Cf.
+// rd: Audio-driven procedural video with reactiond-diffusion models
+// Inspired by Mark IJzerman
+// Josh Berson, josh@joshberson.net
+// 2016 CC BY-NC-ND 4.0
+
+// grayscott.glsl
+// Implement Gray-Scott reaction-diffusoin model, cf.
 // http://blog.hvidtfeldts.net/index.php/2012/08/reaction-diffusion-systems/
 // http://mrob.com/pub/comp/xmorphia/
 // http://www.karlsims.com/rd.html
 
-// TODO: Add orientation to the diffusion rates, per Sims' description?
+// FIXME TODO
+// PASS IN FREQ SPECTRUM AS A TEXTURE, USE IT TO MODIFY PARAMETERS
 
+uniform sampler2D kernel;
 uniform vec2 res; // viewport dimensions in pixels
 
-uniform sampler2d filter;
+//
+// Laplacian
 
-uniform vec4 feedkill;
-uniform vec4 diffusion;
-uniform float dt;
+// FIXME -- add min and max to clamp to edges
+vec2 lp5( vec2 uv, vec2 px ) {
+  vec3 p = vec3( px, 0. );
+  vec2 a = uv - p.zy;
+  vec2 b = uv - p.xz;
+  vec2 c = uv + p.xz;
+  vec2 d = uv + p.zy;
+
+  vec4 lp =
+      texture2D( kernel, a )
+    + texture2D( kernel, b )
+    + texture2D( kernel, c )
+    + texture2D( kernel, d )
+    - 4. * texture2D( kernel, uv );
+
+  return lp.xy;
+}
+
+// FIXME -- THIS IS INCORRECT. p.w assumes 1:1 aspect ratio. Reimplement
+// FIXME -- CHANGE clamp to min and max
+vec2 lp9( vec2 uv, vec4 offset ) {
+  return (
+
+  // Row 1
+  + .5 * texture2D( kernel, clamp( uv - offset.xy, 0., 1. ) )
+  + texture2D( kernel, clamp( uv - offset.zy, 0., 1. ) )
+  + .5 * texture2D( kernel, clamp( uv - offset.wy, 0., 1. ) )
+
+  // Row 2
+  + texture2D( kernel, clamp( uv - offset.xz, 0., 1. ) )
+  - 6. * texture2D( kernel, uv )
+  + texture2D( kernel, clamp( uv + offset.xz, 0., 1. ) )
+
+  // Row 3
+  + .5 * texture2D( kernel, clamp( uv + offset.wy, 0., 1. ) )
+  + texture2D( kernel, clamp( uv + offset.zy, 0., 1. ) )
+  + .5 * texture2D( kernel, clamp( uv + offset.xy, 0., 1. ) )
+
+  ).xy;
+}
+
+// End of vector field utility functions
+//
+
 
 void main() {
   vec2 uv = gl_FragCoord.xy / res;
   vec2 px = 1. / res;
 
-  // TODO: Experiment with gradients
-  // distance( uv, vec2( .5, .5 ) ) -- 2D, centered at center of image
+  // Parameters
+  float feed = .055;
+  float kill = .062;
+  float diffusionA = 1.;
+  float diffusionB = .5;
+  float dt = 1.;
 
-  // Determine local feed and kill rates
-  float f = linear( uv.x, feedkill.x, feedkill.y );
-  float k = linear( uv.y, feedkill.z, feedkill.w );
+  vec2 c = texture2D( kernel, uv ).xy;
+  float a = c.x;
+  float b = c.y;
+  float abb = a * b * b;
 
-  // Determine local diffusion rates
-  float difF = linear( uv.x, diffusion.x, diffusion.y );
-  float difK = linear( uv.y, diffusion.z, diffusion.w );
+  vec2 lc = lp5( uv, px ); // Laplacian
 
-  vec4 v = texture2d( filter, uv );
-  vec2 lv = laplacian( uv, vec4( px, 0., -px.x )).xy;
-  float fkk = v.x * v.y * v.y;
+  vec2 dc = vec2( diffusionA * lc.x - abb + feed * ( 1. - a ),
+                  diffusionB * lc.y + abb - ( feed + kill ) * b );
 
-  vec2 dV = vec2( difF * lv.x - fkk + f * ( 1. - v.x ),
-                  difK * lv.y + fkk - ( f + k ) * v.y );
-
-  gl_FragColor = vec4( dV * dt, 0., 0. );
-}
-
-// FIXME TODO: Clamp texture accesses for edge cases
-// e.g. texture2d( filter, clamp( uv - offset.xy, 0., 1. ) ) ?? or do I need vec2s in the clamp range?
-vec4 laplacian( vec2 uv, vec4 offset ) {
-  return
-  // Row 1
-  + .5 * texture2d( filter, uv - offset.xy )
-  + texture2d( filter, uv - offset.zy )
-  + .5 * texture2d( filter, uv - offset.wy )
-  // Row 2
-  + texture2d( filter, uv - offset.xz )
-  - 6. * texture2d( filter, uv )
-  + texture2d( filter, uv + offset.xz )
-  // Row 3
-  + .5 * texture2d( filter, uv + offset.wy )
-  + texture2d( filter, uv + offset.zy )
-  + .5 * texture2d( filter, uv + offset.xy )
-  ;
-}
-
-//
-// Gradients for feed/kill and diffusion rates
-
-float linear( float x, float f0, float slope ) {
-  return clamp( slope * x + f0, 0., 1. );
-}
-
-float exponential( float x, float f0, float e ) {
-  return clamp( f0 * exp( x * e ), 0., 1. );
-}
-
-float gaussian( float x, float mean, float sd ) {
-  // TODO!
-}
-
-float hamming( float x, FIXME ) {
-  // TODO!
+  gl_FragColor = vec4( clamp( c + dc * dt, 0., 1. ), 0., 1. );
 }

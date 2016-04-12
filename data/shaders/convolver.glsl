@@ -5,34 +5,19 @@ precision mediump int;
 
 #define PROCESSING_COLOR_SHADER
 
+// rd: Audio-driven procedural video with reactiond-diffusion models
+// Inspired by Mark IJzerman
+// Josh Berson, josh@joshberson.net
+// 2016 CC BY-NC-ND 4.0
+
+// convolver.glsl
+// Apply a kernel texture to a frame of video
+
 // TODO: Add distortion -- glitch, compression, blur ...
 
+uniform sampler2D kernel;
+uniform sampler2D frame;
 uniform vec2 res; // viewport dimensions in pixels
-
-uniform sampler2d filter;
-uniform sampler2d frame;
-
-void main() {
-  vec2 uv = gl_FragCoord.xy / res;
-  vec2 p = ( uv.x, 1. - uv.y ); // Processing y-axis is inverted TODO: TEST!
-
-  // vec2 p = -1. + 2. * uv; // [-1,1]
-
-  vec3 c = rgb2hsb( texture2d( frame, p ).rgb );
-  vec2 f = texture2d( filter, uv ).xy;
-
-  // TODO: Experiment with different ways of applying the filter
-  // - Rescale f, e.g. [-1,1]
-  // - c.y * ( f.x + 1. ) ...
-  // - fract( c.x * f.x ) -- apply to hue
-  // - f = abs( log( abs( f ) ) )
-
-  // Modify c components with f
-  c.y = clamp( c.y * f.x, 0., 1. ); // Saturation
-  c.z = clamp( c.z * f.y, 0., 1. ); // Brightness
-
-  gl_FragColor = vec4( hsb2rgb( c ), 1. );
-}
 
 //
 // RGB-HSV conversion
@@ -55,4 +40,28 @@ vec3 hsb2rgb( vec3 c ) {
     vec4 K = vec4( 1., 2. / 3., 1. / 3., 3. );
     vec3 p = abs( fract( c.xxx + K.xyz ) * 6. - K.www );
     return c.z * mix( K.xxx, clamp( p - K.xxx, 0., 1. ), c.y );
+}
+
+// End of color space converters
+//
+
+
+void main() {
+  vec2 uv = gl_FragCoord.xy / res;
+  vec2 p = vec2( uv.x, 1. - uv.y ); // Processing y-axis is inverted TODO: TEST!
+
+  vec3 c = rgb2hsb( texture2D( frame, p ).rgb );
+  vec2 f = texture2D( kernel, uv / scale ).xy;
+
+  // TODO: Experiment with different ways of applying the kernel
+  // - Rescale f, e.g. [-1,1]
+  // - c.y * ( f.x + 1. ) ...
+  // - fract( c.x * f.x ) -- apply to hue
+  // - f = abs( log( abs( f ) ) )
+
+  // Modify c components with f
+  c.y = clamp( c.y * f.x, 0., 1. ); // Saturation
+  c.z = clamp( c.z * f.y, 0., 1. ); // Brightness
+
+  gl_FragColor = vec4( hsb2rgb( c ), 1. );
 }
