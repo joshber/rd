@@ -1,17 +1,9 @@
-#ifdef GL_ES
-precision mediump float;
-precision mediump int;
-#endif
-
-#define PROCESSING_COLOR_SHADER
-
 // rd: Audio-driven procedural video with reactiond-diffusion models
 // Inspired by Mark IJzerman
 // Josh Berson, josh@joshberson.net
 // 2016 CC BY-NC-ND 4.0
 
-// grayscott.glsl
-// Implement Gray-Scott reaction-diffusoin model, cf.
+// grayscott.glsl: Gray-Scott reaction-diffusoin model, cf.
 // http://blog.hvidtfeldts.net/index.php/2012/08/reaction-diffusion-systems/
 // http://mrob.com/pub/comp/xmorphia/
 // http://www.karlsims.com/rd.html
@@ -19,13 +11,20 @@ precision mediump int;
 // FIXME TODO
 // PASS IN FREQ SPECTRUM AS A TEXTURE, USE IT TO MODIFY PARAMETERS
 
+#ifdef GL_ES
+precision mediump float;
+precision mediump int;
+#endif
+
+#define PROCESSING_COLOR_SHADER
+
 uniform sampler2D kernel;
 uniform vec2 res; // viewport dimensions in pixels
 
 //
 // Laplacian
+// TODO: Clamp texture coordinates to [0,1]?
 
-// FIXME -- clamp texture coordinates?
 vec2 lp5( vec2 uv, vec2 px ) {
   vec3 p = vec3( px, 0. );
 
@@ -39,12 +38,11 @@ vec2 lp5( vec2 uv, vec2 px ) {
     + texture2D( kernel, d )
     + texture2D( kernel, e )
     + texture2D( kernel, g )
-    - 4. * texture2D( kernel, uv );
+    - texture2D( kernel, uv ) * 4.;
 
   return lp.xy;
 }
 
-// FIXME -- clamp texture coordinates?
 vec2 lp9( vec2 uv, vec2 px ) {
   vec3 p = vec3( px, 0. );
   vec3 q = vec3( px.x, -px.y, 0. );
@@ -59,15 +57,15 @@ vec2 lp9( vec2 uv, vec2 px ) {
   vec2 h = uv + p.xy;
 
   vec4 lp =
-        texture2D( kernel, a )
-      + texture2D( kernel, b ) * 4.
-      + texture2D( kernel, c )
-      + texture2D( kernel, d ) * 4.
-      + texture2D( kernel, e ) * 4.
-      + texture2D( kernel, f )
-      + texture2D( kernel, g ) * 4.
-      + texture2D( kernel, h )
-      - 20. * texture2D( kernel, uv );
+      texture2D( kernel, a )
+    + texture2D( kernel, b ) * 4.
+    + texture2D( kernel, c )
+    + texture2D( kernel, d ) * 4.
+    + texture2D( kernel, e ) * 4.
+    + texture2D( kernel, f )
+    + texture2D( kernel, g ) * 4.
+    + texture2D( kernel, h )
+    - texture2D( kernel, uv ) * 20.;
 
   return lp.xy;
 }
@@ -96,15 +94,15 @@ float gaussian( float x, float mu, float sig ) {
 
 void main() {
   vec2 uv = gl_FragCoord.xy / res;
-  uv.y = 1. - uv.y; // Processing inverts y-axis
+  //uv.y = 1. - uv.y; // It appears Processing does .not. invert y-axis in offscreen buffers
   vec2 px = 1. / res;
   vec2 center = vec2( .5, .5 );
 
   // Parameters
-  float feed = gaussian( distance( uv, center ), .9, .1 );//.055;
-  float kill = gaussian( distance( uv, center ), .1, .01 );//.062;
-  float diffusionA = linear( uv.x, .01, .1 );//.1;
-  float diffusionB = linear( uv.y, .1, .01 );//.1;
+  float feed = gaussian( distance( uv, center ), .1, .25 );//.055;
+  float kill = 1. - gaussian( distance( uv, center ), .09, .25 );//.062;
+  float diffusionA = 1.;//linear( uv.y, 1., .5 );//.1;
+  float diffusionB = .5;//linear( uv.y, .6, .1 );//.1;
   float dt = .1;
 
   vec2 c = texture2D( kernel, uv ).xy;

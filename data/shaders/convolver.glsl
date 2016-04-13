@@ -1,3 +1,12 @@
+// rd: Audio-driven procedural video with reactiond-diffusion models
+// Inspired by Mark IJzerman
+// Josh Berson, josh@joshberson.net
+// 2016 CC BY-NC-ND 4.0
+
+// convolver.glsl: Apply a kernel to a frame of video
+
+// TODO: Add distortion -- glitch, compression, blur ...
+
 #ifdef GL_ES
 precision mediump float;
 precision mediump int;
@@ -5,19 +14,10 @@ precision mediump int;
 
 #define PROCESSING_COLOR_SHADER
 
-// rd: Audio-driven procedural video with reactiond-diffusion models
-// Inspired by Mark IJzerman
-// Josh Berson, josh@joshberson.net
-// 2016 CC BY-NC-ND 4.0
-
-// convolver.glsl
-// Apply a kernel texture to a frame of video
-
-// TODO: Add distortion -- glitch, compression, blur ...
-
 uniform sampler2D kernel;
 uniform sampler2D frame;
-uniform vec2 res; // viewport dimensions in pixels
+uniform vec2 kres; // kernel dimensions in pixels
+uniform vec2 fres; // frame dimensions in pixels
 
 //
 // RGB-HSV conversion
@@ -47,11 +47,12 @@ vec3 hsb2rgb( vec3 c ) {
 
 
 void main() {
-  vec2 uv = gl_FragCoord.xy / res;
-  uv.y = 1. - uv.y; // Processing inverts y-axis
+  vec2 kuv = gl_FragCoord.xy / kres;
+  vec2 fuv = gl_FragCoord.xy / fres;
+  fuv.y = 1. / fuv.y; // Processing inverts y-axis in images
 
-  vec2 f = texture2D( kernel, uv.xy ).xy;
-  vec3 c = rgb2hsb( texture2D( frame, uv ).rgb );
+  vec2 k = texture2D( kernel, kuv ).xy;
+  vec3 c = rgb2hsb( texture2D( frame, fuv ).rgb );
 
   // TODO: Experiment with different ways of applying the kernel
   // - Rescale f, e.g. [-1,1]
@@ -60,8 +61,10 @@ void main() {
   // - f = abs( log( abs( f ) ) )
 
   // Modify c components with f
-  c.y = clamp( c.y * f.x, 0., 1. ); // Saturation
-  c.z = clamp( c.z * f.y, 0., 1. ); // Brightness
+  c.x = fract( c.x + k.x );
+  //c.y = clamp( c.y * k.x, 0., 1. ); // Saturation
+  //c.z = clamp( c.z * k.y, 0., 1. ); // Brightness
 
   gl_FragColor = vec4( hsb2rgb( c ), 1. );
+  //gl_FragColor = vec4( k, 0., 1. );
 }
