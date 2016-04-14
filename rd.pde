@@ -4,19 +4,30 @@
 // 2016 CC BY-NC-ND 4.0
 
 // FIXME TODO
-// - REINTRODUCE scaling factor -- width/offscreen.width
+// - SOMETHING is still not right with my algorithm -- I'm not getting the kinds of patterns I should be
+// TO TRY
+// - Go back to drawing to the screen, temporarily
+// ??
+
+// - Convert video frame to G-S input: http://mrob.com/pub/comp/screensavers/
+// - OR, use the video frame for feed and kill rates, as MRob does
+
 // - ADD audio-drivenness
+// - On beats (spectral peaks), add a splotch to the kernel?
+// - Multiple scales -- try scale factor in kernel shader,
+//   calculate 2 Laplacians at different scales (different px, scale factor)
 
 // TODO LATER
-// - Two-level Gray-Scott -- 10-20px and then 1px
 // - Beads and API compliance? Switch to PSound? Investigate PSound API
-// Power spectrum visualizer + fps
+// - Power spectrum visualizer + fps
+// McCabe's algorithm?
 
 import beads.*;
 import processing.video.*;
 
 PGraphics offscreen;
 Movie video;
+int defaultFr = 60;
 
 PShader kernel, convolver;
 
@@ -39,7 +50,7 @@ void setup() {
   //pixelDensity( 2 );
 
   colorMode( HSB, 1. ); // TODO: HSB, 2pi, 1., 1.?
-  frameRate( 60 );
+  frameRate( defaultFr );
 
   background( 0. );
   noStroke();
@@ -48,7 +59,7 @@ void setup() {
   // Set up offscreen context for the kernel shader
   // Seed the kernel
 
-  PImage seed = loadImage( "seeds/seed 2.jpg" );
+  PImage seed = loadImage( "seeds/seed11.png" );
   seed.loadPixels();
   offscreen = createGraphics( seed.width, seed.height, P2D );
   offscreen.beginDraw();
@@ -121,7 +132,7 @@ void draw() {
   if ( fc == 60 ) {
     loadKernelShader();
   }
-  if ( fc == 119 ) {
+  else if ( fc == 119 ) {
     loadConvolverShader();
   }
 
@@ -146,12 +157,21 @@ void movieEvent( Movie m ) {
   m.read();
 }
 
+void keyPressed() {
+  if ( '1' <= key && key <= '9' ) {
+    frameRate( int( key ) - int( '0' ) );
+  }
+  else if ( key == ' ' ) {
+    frameRate( defaultFr );
+  }
+  // FIXME TODO: OPTION TO RESEED KERNEL
+}
+
 void loadKernelShader() {
   kernel = loadShader( "shaders/grayscott.glsl" );
   kernel.set( "res", float( offscreen.width ), float( offscreen.height ) );
 }
 void loadConvolverShader() {
   convolver = loadShader( "shaders/convolver.glsl" );
-  convolver.set( "kres", float( offscreen.width ), float( offscreen.height ) );
-  convolver.set( "fres", float( width ), float( height ) );
+  convolver.set( "res", float( width ), float( height ) );
 }

@@ -16,11 +16,10 @@ precision mediump int;
 
 uniform sampler2D kernel;
 uniform sampler2D frame;
-uniform vec2 kres; // kernel dimensions in pixels
-uniform vec2 fres; // frame dimensions in pixels
+uniform vec2 res; // viewport dimensions in pixels
 
 //
-// RGB-HSV conversion
+// RGB-HSB conversion
 // via http://lolengine.net/blog/2013/07/27/rgb-to-hsv-in-glsl
 // cf. https://www.shadertoy.com/view/lsdGzN
 // cf. https://www.shadertoy.com/view/4sS3Dc
@@ -45,11 +44,9 @@ vec3 hsb2rgb( vec3 c ) {
 // End of color space converters
 //
 
-
 void main() {
-  vec2 kuv = gl_FragCoord.xy / kres;
-  vec2 fuv = gl_FragCoord.xy / fres;
-  fuv.y = 1. / fuv.y; // Processing inverts y-axis in images
+  vec2 kuv = gl_FragCoord.xy / res;
+  vec2 fuv = vec2( kuv.x, 1. - kuv.y ); // Processing inverts y-axis in video
 
   vec2 k = texture2D( kernel, kuv ).xy;
   vec3 c = rgb2hsb( texture2D( frame, fuv ).rgb );
@@ -61,10 +58,12 @@ void main() {
   // - f = abs( log( abs( f ) ) )
 
   // Modify c components with f
-  c.x = fract( c.x + k.x );
-  //c.y = clamp( c.y * k.x, 0., 1. ); // Saturation
-  //c.z = clamp( c.z * k.y, 0., 1. ); // Brightness
+  //c.x = fract( c.x + k.x );
+  c.y = clamp( c.y * k.x, 0., 1. ); // Saturation
+  c.z = clamp( c.z * k.y, 0., 1. ); // Brightness
 
-  gl_FragColor = vec4( hsb2rgb( c ), 1. );
-  //gl_FragColor = vec4( k, 0., 1. );
+  //gl_FragColor = vec4( hsb2rgb( c ), 1. );
+
+  // FIXME TODO: Implement a better color scheme for testing
+  gl_FragColor = vec4( k, 0., 1. );
 }
