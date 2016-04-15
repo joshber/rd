@@ -4,10 +4,9 @@
 // 2016 CC BY-NC-ND 4.0
 
 // FIXME TODO
-// - SOMETHING is still not right with my algorithm -- I'm not getting the kinds of patterns I should be
+// - SOMETHING is still not right with my algorithm
 // TO TRY
-// - Go back to drawing to the screen, temporarily
-// ??
+// - Try implementing it in Processing -- if that works, then it's a problem with how stuff gets moved back and forth
 
 // - Convert video frame to G-S input: http://mrob.com/pub/comp/screensavers/
 // - OR, use the video frame for feed and kill rates, as MRob does
@@ -40,8 +39,8 @@ SpectralDifference sd;
 PeakDetector pd;
 int nPeaks = 32;
 
-PFont overlayFont;
-float overlayFontSize = 12.;
+PFont olFont;
+float olFsize = 12.;
 
 
 void setup() {
@@ -59,7 +58,7 @@ void setup() {
   // Set up offscreen context for the kernel shader
   // Seed the kernel
 
-  PImage seed = loadImage( "seeds/seed11.png" );
+  PImage seed = loadImage( "seeds/seed1.png" );
   seed.loadPixels();
   offscreen = createGraphics( seed.width, seed.height, P2D );
   offscreen.beginDraw();
@@ -114,16 +113,17 @@ void setup() {
   // Audio analysis is go!
   //
 
-  overlayFont = createFont( "fonts/InputSansCondensed-Black.ttf", overlayFontSize, true ); // true==antialiasing
+  // Load font for overlay
+  olFont = createFont( "fonts/InputSansCondensed-Black.ttf", olFsize, true ); // true==antialiasing
   textAlign( LEFT, TOP );
 
   // Load shaders
   loadKernelShader();
-  loadConvolverShader();
+  //loadConvolverShader();
 
   // Start the video
-  video = new Movie( this, "video/JLT 12 04 2016.mov" );
-  video.loop();
+  //video = new Movie( this, "video/JLT 12 04 2016.mov" );
+  //video.loop();
 }
 
 void draw() {
@@ -133,7 +133,7 @@ void draw() {
     loadKernelShader();
   }
   else if ( fc == 119 ) {
-    loadConvolverShader();
+    //loadConvolverShader();
   }
 
   // Update the kernel in an offscreen buffer
@@ -141,13 +141,19 @@ void draw() {
   offscreen.beginDraw();
   offscreen.shader( kernel );
   offscreen.rect( 0, 0, offscreen.width, offscreen.height );
+//  offscreen.endDraw();
+
+  offscreen.loadPixels();
+  loadPixels();
+  arrayCopy( offscreen.pixels, pixels );
+  updatePixels();
   offscreen.endDraw();
 
   // Apply the kernel to the video
-  convolver.set( "kernel", offscreen );
-  convolver.set( "frame", video );
-  shader( convolver );
-  rect( 0, 0, width, height );
+  //convolver.set( "kernel", offscreen );
+  //convolver.set( "frame", video );
+  //shader( convolver );
+  //rect( 0, 0, width, height );
 
   // TODO: Add a visualizer -- spectral peaks, power spectrum etc?
   // Maybe an instantaneous power spectrum up the righthand side--log freq vertical, power by hue, 180 to 0 degrees in HSB

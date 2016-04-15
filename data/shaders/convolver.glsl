@@ -62,8 +62,8 @@ void main() {
   c.y = clamp( c.y * k.x, 0., 1. ); // Saturation
   c.z = clamp( c.z * k.y, 0., 1. ); // Brightness
 
-  //gl_FragColor = vec4( hsb2rgb( c ), 1. );
+  gl_FragColor = vec4( hsb2rgb( c ), 1. );
 
   // FIXME TODO: Implement a better color scheme for testing
-  gl_FragColor = vec4( k, 0., 1. );
+  //gl_FragColor = vec4( k, 0., 1. );
 }
