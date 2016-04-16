@@ -111,11 +111,11 @@ void main() {
   // .025:.060 Pulsing solitons
   // .029:.057 Mazes
   // .026:.051 Chaos
-  float feed = .062;
-  float kill = .061;
+  float feed = .029;
+  float kill = .057;
 
   // Speed and scale parameters
-  float ds = .082; // diffusion scale
+  float ds = .082; // diffusion rate scale. This confounded me for a week. Keep it low
   float dr = 2.; // diffusion rate ratio, U:V
   float dt = 2.5; // time step
 
@@ -138,11 +138,18 @@ void main() {
   // with Gaussian falloff (sd = 1/3 brush radius),
   // clamped at 1
   // Thanks to https://github.com/pmneila/jsexp/blob/master/grayscott/index.html#L61
-  // FIXME TODO: Brush aspect ratio
+  // FIXME TODO: Brush aspect ratio -- need a polar transform
+  // float theta = atan( res.yx )
 
   float bd = distance( p, brushP / res );
   float br = brushR / res.x;
-  UV.y = min( 1., UV.y + ( ( brush && bd < br ) ? .5 * exp( -bd * bd / ( 2. * br * br / 9. ) ) : 0. ) );
+  float mark = .5 * exp( -bd * bd / ( 2. * br * br / 9. ) );
+
+  // FIXME THIS IS NOT RIGHT -- THINK ABOUT IT
+  float theta = atan( ( brushP.y - gl_FragCoord.y ) / ( brushP.x - gl_FragCoord.x ) );
+  float aspect = cos( theta ) * res.y / res.x;
+
+  UV.y = min( 1., UV.y + ( ( brush && bd * aspect < br ) ? mark : 0. ) );
 
   gl_FragColor = vec4( clamp( UV + dUV * dt, 0., 1. ), 0., 1. );
 }

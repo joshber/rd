@@ -58,11 +58,11 @@ void main() {
   // Display the reaction-diffusion pattern itself, not a convolution with the frame
 
   // HSB target ranges
-  float hfloor = .5;
+  float hfloor = .4;
   float hceil = 1.;
-  float sfloor = 1.;
+  float sfloor = .5;
   float sceil = 1.;
-  float bfloor = 1.;
+  float bfloor = .5;
   float bceil = 1.;
 
   c.x = k.y * ( hceil - hfloor ) + hfloor; // FIXME What if hceil < hfloor?
