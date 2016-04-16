@@ -4,9 +4,8 @@
 // 2016 CC BY-NC-ND 4.0
 
 // FIXME TODO
-// - SOMETHING is still not right with my algorithm
-// TO TRY
-// - Try implementing it in Processing -- if that works, then it's a problem with how stuff gets moved back and forth
+// - Brush aspect ratio
+// - Toggle between video and G-S display -- toggle in convolver, not with dummy?
 
 // - Convert video frame to G-S input: http://mrob.com/pub/comp/screensavers/
 // - OR, use the video frame for feed and kill rates, as MRob does
@@ -25,10 +24,15 @@ import beads.*;
 import processing.video.*;
 
 PGraphics offscreen;
+PGraphics dummy;
 Movie video;
 int defaultFr = 60;
+String seedpath = "";
 
-PShader kernel, convolver;
+PShader kernel, convolve;
+int kscale = 2;
+
+int brushRadius = 1<<3;
 
 AudioContext ac;
 ZeroCross zc;
@@ -56,16 +60,30 @@ void setup() {
 
   //
   // Set up offscreen context for the kernel shader
-  // Seed the kernel
 
-  PImage seed = loadImage( "seeds/seed1.png" );
-  seed.loadPixels();
-  offscreen = createGraphics( seed.width, seed.height, P2D );
-  offscreen.beginDraw();
-  offscreen.loadPixels();
-  arrayCopy( seed.pixels, offscreen.pixels );
-  offscreen.updatePixels();
-  offscreen.endDraw();
+  if ( ! seedpath.equals( "" ) ) {
+    PImage seed = loadImage( "seeds/" + seedpath + ".png" );
+    seed.loadPixels();
+    offscreen = createGraphics( seed.width, seed.height, P2D );
+    offscreen.beginDraw();
+    offscreen.loadPixels();
+    arrayCopy( seed.pixels, offscreen.pixels );
+    offscreen.updatePixels();
+    offscreen.endDraw();
+  }
+  else {
+    offscreen = createGraphics( width / kscale, height / kscale, P2D );
+    offscreen.beginDraw();
+    offscreen.colorMode( RGB, 1. );
+    offscreen.background( color( 1., 0., 0. ) );
+    offscreen.endDraw();
+  }
+
+  // Stand-in for video during testing
+  dummy = createGraphics( width, height, P2D );
+  dummy.beginDraw();
+  dummy.background( 0. );
+  dummy.endDraw();
 
   //
   // Set up audio in and analyzer
@@ -119,7 +137,8 @@ void setup() {
 
   // Load shaders
   loadKernelShader();
-  //loadConvolverShader();
+  brushOff();
+  loadConvolveShader();
 
   // Start the video
   //video = new Movie( this, "video/JLT 12 04 2016.mov" );
@@ -133,34 +152,68 @@ void draw() {
     loadKernelShader();
   }
   else if ( fc == 119 ) {
-    //loadConvolverShader();
+    loadConvolveShader();
   }
 
+  //
   // Update the kernel in an offscreen buffer
+
   kernel.set( "kernel", offscreen );
+  kernel.set( "brushP", float( mouseX / kscale ), float( ( height - mouseY ) / kscale ) );
+    // 1 - height: Processing's y-axis is inverted wrt GLSL's
+
   offscreen.beginDraw();
   offscreen.shader( kernel );
   offscreen.rect( 0, 0, offscreen.width, offscreen.height );
-//  offscreen.endDraw();
-
-  offscreen.loadPixels();
-  loadPixels();
-  arrayCopy( offscreen.pixels, pixels );
-  updatePixels();
   offscreen.endDraw();
 
-  // Apply the kernel to the video
-  //convolver.set( "kernel", offscreen );
-  //convolver.set( "frame", video );
-  //shader( convolver );
-  //rect( 0, 0, width, height );
+  // FIXME TODO: A way to switch between video and dummy
+
+  // Apply the kernel to the video (or show the kernel)
+  convolve.set( "kernel", offscreen );
+  convolve.set( "frame", dummy );
+  shader( convolve );
+  rect( 0, 0, width, height );
 
   // TODO: Add a visualizer -- spectral peaks, power spectrum etc?
   // Maybe an instantaneous power spectrum up the righthand side--log freq vertical, power by hue, 180 to 0 degrees in HSB
 }
 
+void loadKernelShader() {
+  kernel = loadShader( "shaders/grayscott.glsl" );
+  kernel.set( "res", float( offscreen.width ), float( offscreen.height ) );
+  kernel.set( "brushR", float( brushRadius ) );
+}
+void loadConvolveShader() {
+  convolve = loadShader( "shaders/convolve.glsl" );
+  convolve.set( "res", float( width ), float( height ) );
+}
+
+void brushOff() {
+  kernel.set( "brush", false );
+}
+void setBrushRadius( int i ) {
+  brushRadius = 1 << i;
+  kernel.set( "brushR", float( brushRadius ) );
+}
+void resetKernel() {
+  offscreen.beginDraw();
+  offscreen.background( color( 1., 0., 0., 1. ) );
+  offscreen.endDraw();
+}
+
 void movieEvent( Movie m ) {
   m.read();
+}
+
+void mouseDragged() {
+  kernel.set( "brush", true );
+}
+void mouseMoved() {
+  brushOff();
+}
+void mouseReleased() {
+  brushOff();
 }
 
 void keyPressed() {
@@ -170,14 +223,10 @@ void keyPressed() {
   else if ( key == ' ' ) {
     frameRate( defaultFr );
   }
-  // FIXME TODO: OPTION TO RESEED KERNEL
-}
-
-void loadKernelShader() {
-  kernel = loadShader( "shaders/grayscott.glsl" );
-  kernel.set( "res", float( offscreen.width ), float( offscreen.height ) );
-}
-void loadConvolverShader() {
-  convolver = loadShader( "shaders/convolver.glsl" );
-  convolver.set( "res", float( width ), float( height ) );
+  else if ( 'a' <= key && key <= 'f' ) {
+    setBrushRadius( int( key ) - int( 'a' ) + 1 );
+  }
+  else if ( key == 'r' ) {
+    resetKernel();
+  }
 }

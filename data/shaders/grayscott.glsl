@@ -21,10 +21,16 @@ precision mediump int;
 uniform sampler2D kernel;
 uniform vec2 res; // kernel dimensions in pixels
 
+uniform bool brush;
+uniform float brushR; // brush radius
+uniform vec2 brushP; // brush position
+
 //
 // Laplacians
 
 // FIXME TODO: Implement toroidal Laplacians
+// - Abstract the edge checking to a pair of separate functions, torX and torY
+// - to torN functions, pass in ±1 to indicate which edge to check
 
 /* NB TODO http://mrob.com/pub/comp/screensavers/
 vec2 cup = vec2( c.x, (c.y+1.0 > sz.y) ? c.y+1.0-sz.y : c.y+1.0);
@@ -38,6 +44,7 @@ Look at how he implements a toroid (closing edges) on a 5-point stencil!
 vec4 lp5( vec2 uv, float scale ) {
   vec3 p = vec3( scale / res, 0. );
 
+  // Five-point stencil. Imagine a 3x3 grid labeled a-i. We're just taking the y±1 and x±1 points
   vec2 b = uv - p.zy;
   vec2 d = uv - p.xz;
   vec2 f = uv + p.xz;
@@ -64,6 +71,7 @@ vec4 lp9( vec2 uv, float scale ) {
   vec3 p = vec3( scale / res, 0. );
   vec3 q = vec3( p.x, -p.y, 0. );
 
+  // Nine-point stencil: 3x3 grid labeled a-i
   vec2 a = uv - p.xy;
   vec2 b = uv - p.zy;
   vec2 c = uv + q.xy;
@@ -95,14 +103,21 @@ vec4 lp9( vec2 uv, float scale ) {
 void main() {
   vec2 p = gl_FragCoord.xy / res;
 
-  // State space parameters
-  float feed = .062; // .062:.061 == U-skate world
+  // Gray-Scott state space parameters
+  // .062:.061 U-skate world
+  // .098:.056 Worms
+  // .078:.061 Worms
+  // .030:.062 Solitons
+  // .025:.060 Pulsing solitons
+  // .029:.057 Mazes
+  // .026:.051 Chaos
+  float feed = .062;
   float kill = .061;
 
   // Speed and scale parameters
-  float ds = .2; // diffusion scale
+  float ds = .082; // diffusion scale
   float dr = 2.; // diffusion rate ratio, U:V
-  float dt = .2; // time step
+  float dt = 2.5; // time step
 
   vec4 lpUV = lp9( p, 1. ); // Laplacian
   vec2 lp = lpUV.xy;
@@ -113,8 +128,21 @@ void main() {
   float V = UV.y;
   float UVV = U * V * V;
 
+  // Gray-Scott
   vec2 dUV = vec2(  ds * lp.x - UVV + feed * ( 1. - U ),
                     ds / dr * lp.y + UVV - ( feed + kill ) * V );
+
+  //
+  // Draw on the kernel if the brush is on
+  // One stroke raises the V concentration by .5 at the center,
+  // with Gaussian falloff (sd = 1/3 brush radius),
+  // clamped at 1
+  // Thanks to https://github.com/pmneila/jsexp/blob/master/grayscott/index.html#L61
+  // FIXME TODO: Brush aspect ratio
+
+  float bd = distance( p, brushP / res );
+  float br = brushR / res.x;
+  UV.y = min( 1., UV.y + ( ( brush && bd < br ) ? .5 * exp( -bd * bd / ( 2. * br * br / 9. ) ) : 0. ) );
 
   gl_FragColor = vec4( clamp( UV + dUV * dt, 0., 1. ), 0., 1. );
 }

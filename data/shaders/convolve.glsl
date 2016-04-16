@@ -3,7 +3,7 @@
 // Josh Berson, josh@joshberson.net
 // 2016 CC BY-NC-ND 4.0
 
-// convolver.glsl: Apply a kernel to a frame of video
+// apply.glsl: Apply a kernel to a frame of video
 
 // TODO: Add distortion -- glitch, compression, blur ...
 
@@ -25,7 +25,7 @@ uniform vec2 res; // viewport dimensions in pixels
 // cf. https://www.shadertoy.com/view/4sS3Dc
 // cf. http://www.chilliant.com/rgb2hsv.html
 
-vec3 rgb2hsb( vec3 c ) {
+vec3 rgb_hsb( vec3 c ) {
     vec4 K = vec4( 0., -1. / 3., 2. / 3., -1. ) ;
     vec4 p = c.g < c.b ? vec4( c.bg, K.wz ) : vec4( c.gb, K.xy );
     vec4 q = c.r < p.x ? vec4( p.xyw, c.r ) : vec4( c.r, p.yzx );
@@ -35,7 +35,7 @@ vec3 rgb2hsb( vec3 c ) {
     return vec3( abs( q.z + ( q.w - q.y ) / ( 6. * d + e ) ), d / ( q.x + e ), q.x );
 }
 
-vec3 hsb2rgb( vec3 c ) {
+vec3 hsb_rgb( vec3 c ) {
     vec4 K = vec4( 1., 2. / 3., 1. / 3., 3. );
     vec3 p = abs( fract( c.xxx + K.xyz ) * 6. - K.www );
     return c.z * mix( K.xxx, clamp( p - K.xxx, 0., 1. ), c.y );
@@ -49,21 +49,25 @@ void main() {
   vec2 fuv = vec2( kuv.x, 1. - kuv.y ); // Processing inverts y-axis in video
 
   vec2 k = texture2D( kernel, kuv ).xy;
-  vec3 c = rgb2hsb( texture2D( frame, fuv ).rgb );
+  vec3 c = rgb_hsb( texture2D( frame, fuv ).rgb );
 
-  // TODO: Experiment with different ways of applying the kernel
-  // - Rescale f, e.g. [-1,1]
-  // - c.y * ( f.x + 1. ) ...
-  // - fract( c.x * f.x ) -- apply to hue
-  // - f = abs( log( abs( f ) ) )
+  // Modify c components with k
+  //c.z = clamp( c.z * k.y, 0., 1. ); // Brightness
 
-  // Modify c components with f
-  //c.x = fract( c.x + k.x );
-  c.y = clamp( c.y * k.x, 0., 1. ); // Saturation
-  c.z = clamp( c.z * k.y, 0., 1. ); // Brightness
+  //
+  // Display the reaction-diffusion pattern itself, not a convolution with the frame
 
-  gl_FragColor = vec4( hsb2rgb( c ), 1. );
+  // HSB target ranges
+  float hfloor = .5;
+  float hceil = 1.;
+  float sfloor = 1.;
+  float sceil = 1.;
+  float bfloor = 1.;
+  float bceil = 1.;
 
-  // FIXME TODO: Implement a better color scheme for testing
-  //gl_FragColor = vec4( k, 0., 1. );
+  c.x = k.y * ( hceil - hfloor ) + hfloor; // FIXME What if hceil < hfloor?
+  c.y = k.y * ( sceil - sfloor ) + sfloor;
+  c.z = k.y * ( bceil - bfloor ) + bfloor;
+
+  gl_FragColor = vec4( hsb_rgb( c ), 1. );
 }
