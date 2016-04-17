@@ -6,7 +6,7 @@
 // grayscott.glsl: Gray-Scott reaction-diffusion model, cf.
 // http://mrob.com/pub/comp/xmorphia/
 // http://blog.hvidtfeldts.net/index.php/2012/08/reaction-diffusion-systems/
-// http://www.karlsims.com/rd.html
+// https://github.com/pmneila/jsexp / https://pmneila.github.io/jsexp/grayscott/
 
 #ifdef GL_ES
 precision mediump float;
@@ -27,6 +27,7 @@ uniform vec2 brushP; // brush position
 
 // Toroidal version TODO
 // - Check correctness of toroidal versions
+// -- does not seem to be working in cases where the initial seed (i.e., brush) did not touch the edge
 // - More efficient to incorporate the branches into the initial assignments?
 
 vec4 lp5( vec2 uv, float scale ) {
@@ -52,6 +53,7 @@ vec4 lp5( vec2 uv, float scale ) {
 }
 
 // Toroidal geometry
+// Thanks: http://mrob.com/pub/comp/screensavers/ (see function gray_scott 40 percent of the way down)
 vec4 torlp5( vec2 uv, float scale ) {
   vec3 p = vec3( scale / res, 0. );
 
@@ -168,7 +170,26 @@ vec4 torlp9( vec2 uv, float scale ) {
   return vec4( lp.xy, UV.xy );
 }
 
-// End of vector field utility functions
+// End of Laplacians
+//
+
+//
+// Gradients
+// I.e., to systematically vary feed and kill across the kernel
+
+float linear( float x, float a, float b ) {
+  return b + x * ( a - b );
+}
+
+float exponential( float x, float e, float a ) {
+  return x * a * exp( e );
+}
+
+float gaussian( float x, float mu, float sig ) {
+  return mu * exp( - x * x / ( 2 * sig * sig ) );
+}
+
+// End of gradients
 //
 
 void main() {
@@ -181,9 +202,14 @@ void main() {
   // .030:.062 Solitons
   // .025:.060 Pulsing solitons
   // .029:.057 Mazes
+  // .039:.058 Holes
   // .026:.051 Chaos
-  float feed = .029;
-  float kill = .057;
+  // .034:.056 Chaos + holes
+  // .014:.054 Moving spots
+  // .018:.051 Spots and loops
+  // .014:.045 Waves
+  float feed = .014;
+  float kill = .045;
 
   // Speed and scale parameters
   float ds = .082; // diffusion rate scale. This confounded me for a week. Keep it low
@@ -210,6 +236,8 @@ void main() {
   // clamped at 1
   // Thanks to https://github.com/pmneila/jsexp/blob/master/grayscott/index.html#L61
   // sqrt•dot() instead of distance() gives us a chance to correct for aspect ratio
+  // Edge geometry is not toroidal, but that would be more work, computationally,
+  // than it'd be worth at this stage
 
   vec2 bdiff = ( gl_FragCoord.xy - brushP ) / res.x;
   float bd = sqrt( dot( bdiff, bdiff ) );

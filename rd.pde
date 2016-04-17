@@ -29,7 +29,7 @@ Movie video;
 int defaultFr = 60;
 
 PShader kernel, convolve;
-int kscale = 2;
+int kscale = 2; // larger == coarser-grained kernel
 
 int brushRadius = 1<<3;
 
@@ -133,12 +133,12 @@ void setup() {
 }
 
 void draw() {
-  // Reload shaders every 2s
-  int fc = frameCount % 120;
-  if ( fc == 60 ) {
+  // Reload shaders every 1s
+  int fc = frameCount % 60;
+  if ( fc == 30 ) {
     loadKernelShader();
   }
-  else if ( fc == 119 ) {
+  else if ( fc == 59 ) {
     loadConvolveShader();
   }
 
