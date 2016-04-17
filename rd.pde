@@ -4,23 +4,21 @@
 // 2016 CC BY-NC-ND 4.0
 
 // FIXME TODO
-// - Toroidal Laplacian!
 // - Add feed/kill gradients back in
 // - Toggle between video and G-S display -- 2 shaders?
 // - h/v Blur for second-level kernel -- toroidal!
+// - Power spectrum visualizer + fps
 
 // - Convert video frame to G-S input: http://mrob.com/pub/comp/screensavers/
 // - OR, use the video frame for feed and kill rates, as MRob does
 
 // - ADD audio-drivenness
 // - On beats (spectral peaks), add a splotch to the kernel?
-// - Multiple scales -- try scale factor in kernel shader,
-//   calculate 2 Laplacians at different scales (different px, scale factor)
 
 // TODO LATER
+// - Signaling among instances
+// - Unsupervised learning
 // - Beads and API compliance? Switch to PSound? Investigate PSound API
-// - Power spectrum visualizer + fps
-// McCabe's algorithm?
 
 import beads.*;
 import processing.video.*;

@@ -8,9 +8,6 @@
 // http://blog.hvidtfeldts.net/index.php/2012/08/reaction-diffusion-systems/
 // http://www.karlsims.com/rd.html
 
-// FIXME TODO
-// PASS IN FREQ SPECTRUM AS A TEXTURE, USE IT TO MODIFY PARAMETERS
-
 #ifdef GL_ES
 precision mediump float;
 precision mediump int;
@@ -28,18 +25,9 @@ uniform vec2 brushP; // brush position
 //
 // Laplacians
 
-// FIXME TODO: Implement toroidal Laplacians
-// - Abstract the edge checking to a pair of separate functions, torX and torY
-// - to torN functions, pass in ±1 to indicate which edge to check
-
-/* NB TODO http://mrob.com/pub/comp/screensavers/
-vec2 cup = vec2( c.x, (c.y+1.0 > sz.y) ? c.y+1.0-sz.y : c.y+1.0);
-    vec2 cdn = vec2( c.x, (c.y<1.0) ? c.y+sz.y-1.0 : c.y-1.0);
-    vec2 crt = vec2((c.x+1.0 > sz.x) ? c.x+1.0-sz.x : c.x+1.0, c.y);
-    vec2 clt = vec2((c.x<1.0) ? c.x+sz.x-1.0 : c.x-1.0, c.y);
-
-Look at how he implements a toroid (closing edges) on a 5-point stencil!
-*/
+// Toroidal version TODO
+// - Check correctness of toroidal versions
+// - More efficient to incorporate the branches into the initial assignments?
 
 vec4 lp5( vec2 uv, float scale ) {
   vec3 p = vec3( scale / res, 0. );
@@ -59,13 +47,44 @@ vec4 lp5( vec2 uv, float scale ) {
     + texture2D( kernel, h )
     - UV * 4. );
 
-  return vec4( lp.xy, UV.xy ); // Sample the current fragment just once
+  // By returning UV here, we obviate the need to resample the current fragment
+  return vec4( lp.xy, UV.xy );
 }
 
+// Toroidal geometry
+vec4 torlp5( vec2 uv, float scale ) {
+  vec3 p = vec3( scale / res, 0. );
+
+  // Five-point stencil. Imagine a 3x3 grid labeled a-i. We're just taking the y±1 and x±1 points
+  vec2 b = uv - p.zy;
+  vec2 d = uv - p.xz;
+  vec2 f = uv + p.xz;
+  vec2 h = uv + p.zy;
+
+  // Wrap at the edges FIXME CHECK
+  b.y += b.y < 0. ? 1. : 0.;
+  d.x += d.x < 0. ? 1. : 0.;
+  f.x -= f.x > 1. ? 1. : 0.;
+  h.y -= h.y > 1. ? 1. : 0.;
+
+  vec4 UV = texture2D( kernel, uv );
+
+  vec4 lp = ( 1. / ( scale * scale ) ) * (
+      texture2D( kernel, b )
+    + texture2D( kernel, d )
+    + texture2D( kernel, f )
+    + texture2D( kernel, h )
+    - UV * 4. );
+
+  // By returning UV here, we obviate the need to resample the current fragment
+  return vec4( lp.xy, UV.xy );
+}
+
+//
 // Nine-point stencils for the Laplacian abound
-// http://www.nada.kth.se/~tony/abstracts/Lin90-PAMI.html
+// This one comes from http://www.nada.kth.se/~tony/abstracts/Lin90-PAMI.html
 // via https://en.wikipedia.org/wiki/Discrete_Laplace_operator
-// suggested this one, which agreees with the five-point
+// It agrees with the five-point
 
 vec4 lp9( vec2 uv, float scale ) {
   vec3 p = vec3( scale / res, 0. );
@@ -94,7 +113,59 @@ vec4 lp9( vec2 uv, float scale ) {
     + texture2D( kernel, i )
     - UV * 20. );
 
-  return vec4( lp.xy, UV.xy ); // Sample the current fragment just once
+  // By returning UV here, we obviate the need to resample the current fragment
+  return vec4( lp.xy, UV.xy );
+}
+
+// Toroidal geometry
+vec4 torlp9( vec2 uv, float scale ) {
+  vec3 p = vec3( scale / res, 0. );
+  vec3 q = vec3( p.x, -p.y, 0. );
+
+  // Nine-point stencil: 3x3 grid labeled a-i
+  vec2 a = uv - p.xy;
+  vec2 b = uv - p.zy;
+  vec2 c = uv + q.xy;
+  vec2 d = uv - p.xz;
+  vec2 f = uv + p.xz;
+  vec2 g = uv - q.xy;
+  vec2 h = uv + p.zy;
+  vec2 i = uv + p.xy;
+
+  //
+  // Wrap at the edges
+
+  // Sides
+  b.y += b.y < 0. ? 1. : 0.;
+  d.x += d.x < 0. ? 1. : 0.;
+  f.x -= f.x > 1. ? 1. : 0.;
+  h.y -= h.y > 1. ? 1. : 0.;
+
+  // Corners
+  a.x += a.x < 0. ? 1. : 0.;
+  a.y += a.y < 0. ? 1. : 0.;
+  c.x -= c.x > 1. ? 1. : 0.;
+  c.y += c.y < 0. ? 1. : 0.;
+  g.x += g.x < 0. ? 1. : 0.;
+  g.y -= g.y > 1. ? 1. : 0.;
+  i.x -= i.x > 1. ? 1. : 0.;
+  i.y -= i.y > 1. ? 1. : 0.;
+
+  vec4 UV = texture2D( kernel, uv );
+
+  vec4 lp = ( 1. / 6. * ( scale * scale ) ) * (
+      texture2D( kernel, a )
+    + texture2D( kernel, b ) * 4.
+    + texture2D( kernel, c )
+    + texture2D( kernel, d ) * 4.
+    + texture2D( kernel, f ) * 4.
+    + texture2D( kernel, g )
+    + texture2D( kernel, h ) * 4.
+    + texture2D( kernel, i )
+    - UV * 20. );
+
+  // By returning UV here, we obviate the need to resample the current fragment
+  return vec4( lp.xy, UV.xy );
 }
 
 // End of vector field utility functions
@@ -119,7 +190,7 @@ void main() {
   float dr = 2.; // diffusion rate ratio, U:V
   float dt = 2.5; // time step
 
-  vec4 lpUV = lp9( p, 1. ); // Laplacian
+  vec4 lpUV = torlp9( p, 1. ); // Laplacian
   vec2 lp = lpUV.xy;
   vec2 UV = lpUV.zw;
 
