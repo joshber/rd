@@ -4,8 +4,10 @@
 // 2016 CC BY-NC-ND 4.0
 
 // FIXME TODO
-// - Brush aspect ratio
-// - Toggle between video and G-S display -- toggle in convolver, not with dummy?
+// - Toroidal Laplacian!
+// - Add feed/kill gradients back in
+// - Toggle between video and G-S display -- 2 shaders?
+// - h/v Blur for second-level kernel -- toroidal!
 
 // - Convert video frame to G-S input: http://mrob.com/pub/comp/screensavers/
 // - OR, use the video frame for feed and kill rates, as MRob does
@@ -23,11 +25,10 @@
 import beads.*;
 import processing.video.*;
 
-PGraphics offscreen;
+PGraphics kbuf;
 PGraphics dummy;
 Movie video;
 int defaultFr = 60;
-String seedpath = "";
 
 PShader kernel, convolve;
 int kscale = 2;
@@ -61,23 +62,11 @@ void setup() {
   //
   // Set up offscreen context for the kernel shader
 
-  if ( ! seedpath.equals( "" ) ) {
-    PImage seed = loadImage( "seeds/" + seedpath + ".png" );
-    seed.loadPixels();
-    offscreen = createGraphics( seed.width, seed.height, P2D );
-    offscreen.beginDraw();
-    offscreen.loadPixels();
-    arrayCopy( seed.pixels, offscreen.pixels );
-    offscreen.updatePixels();
-    offscreen.endDraw();
-  }
-  else {
-    offscreen = createGraphics( width / kscale, height / kscale, P2D );
-    offscreen.beginDraw();
-    offscreen.colorMode( RGB, 1. );
-    offscreen.background( color( 1., 0., 0. ) );
-    offscreen.endDraw();
-  }
+  kbuf = createGraphics( width / kscale, height / kscale, P2D );
+  kbuf.beginDraw();
+  kbuf.colorMode( RGB, 1. );
+  kbuf.background( color( 1., 0., 0. ) );
+  kbuf.endDraw();
 
   // Stand-in for video during testing
   dummy = createGraphics( width, height, P2D );
@@ -158,19 +147,19 @@ void draw() {
   //
   // Update the kernel in an offscreen buffer
 
-  kernel.set( "kernel", offscreen );
+  kernel.set( "kernel", kbuf );
   kernel.set( "brushP", float( mouseX / kscale ), float( ( height - mouseY ) / kscale ) );
     // 1 - height: Processing's y-axis is inverted wrt GLSL's
 
-  offscreen.beginDraw();
-  offscreen.shader( kernel );
-  offscreen.rect( 0, 0, offscreen.width, offscreen.height );
-  offscreen.endDraw();
+  kbuf.beginDraw();
+  kbuf.shader( kernel );
+  kbuf.rect( 0, 0, kbuf.width, kbuf.height );
+  kbuf.endDraw();
 
   // FIXME TODO: A way to switch between video and dummy
 
   // Apply the kernel to the video (or show the kernel)
-  convolve.set( "kernel", offscreen );
+  convolve.set( "kernel", kbuf );
   convolve.set( "frame", dummy );
   shader( convolve );
   rect( 0, 0, width, height );
@@ -181,7 +170,7 @@ void draw() {
 
 void loadKernelShader() {
   kernel = loadShader( "shaders/grayscott.glsl" );
-  kernel.set( "res", float( offscreen.width ), float( offscreen.height ) );
+  kernel.set( "res", float( kbuf.width ), float( kbuf.height ) );
   kernel.set( "brushR", float( brushRadius ) );
 }
 void loadConvolveShader() {
@@ -197,9 +186,9 @@ void setBrushRadius( int i ) {
   kernel.set( "brushR", float( brushRadius ) );
 }
 void resetKernel() {
-  offscreen.beginDraw();
-  offscreen.background( color( 1., 0., 0., 1. ) );
-  offscreen.endDraw();
+  kbuf.beginDraw();
+  kbuf.background( color( 1., 0., 0., 1. ) );
+  kbuf.endDraw();
 }
 
 void movieEvent( Movie m ) {

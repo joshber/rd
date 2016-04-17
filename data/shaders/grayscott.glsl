@@ -138,18 +138,12 @@ void main() {
   // with Gaussian falloff (sd = 1/3 brush radius),
   // clamped at 1
   // Thanks to https://github.com/pmneila/jsexp/blob/master/grayscott/index.html#L61
-  // FIXME TODO: Brush aspect ratio -- need a polar transform
-  // float theta = atan( res.yx )
+  // sqrt•dot() instead of distance() gives us a chance to correct for aspect ratio
 
-  float bd = distance( p, brushP / res );
+  vec2 bdiff = ( gl_FragCoord.xy - brushP ) / res.x;
+  float bd = sqrt( dot( bdiff, bdiff ) );
   float br = brushR / res.x;
-  float mark = .5 * exp( -bd * bd / ( 2. * br * br / 9. ) );
-
-  // FIXME THIS IS NOT RIGHT -- THINK ABOUT IT
-  float theta = atan( ( brushP.y - gl_FragCoord.y ) / ( brushP.x - gl_FragCoord.x ) );
-  float aspect = cos( theta ) * res.y / res.x;
-
-  UV.y = min( 1., UV.y + ( ( brush && bd * aspect < br ) ? mark : 0. ) );
+  UV.y = min( 1., UV.y + ( ( brush && bd < br ) ? .5 * exp( -bd * bd / ( 2. * br * br / 9. ) ) : 0. ) );
 
   gl_FragColor = vec4( clamp( UV + dUV * dt, 0., 1. ), 0., 1. );
 }
