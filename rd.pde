@@ -3,11 +3,8 @@
 // Josh Berson, josh@joshberson.net
 // 2016 CC BY-NC-ND 4.0
 
-// FIXME TODO
-// - Add feed/kill gradients back in
-// - Abstract UI signals from keyPressed()
-// - (Log-binned?) power spectrum visualizer + spectral peaks + zero crossings + fps
-//   -- do it with a shader, just draw it on parts of the screen
+// TODO
+// - Log-binned power spectrum visualizer
 
 // - Add audio-drivenness
 // - On beats (spectral peaks), add a splotch to the kernel?
@@ -51,7 +48,17 @@ PFont olFont;
 float olFsize = 12.;
 
 boolean showVideo = false;
+boolean showPs = false;
 boolean showFr = false;
+
+// For power spectrum visualizer
+// FIXME TWEAK
+float hfloor = .5;
+float hceil = 1.;
+float sfloor = 1.;
+float sceil = 1.;
+float bfloor = 1.;
+float bceil = 1.;
 
 
 void setup() {
@@ -59,7 +66,7 @@ void setup() {
   //fullScreen( P2D /*FX2D*/, 1 );
   //pixelDensity( 2 );
 
-  colorMode( HSB, 1. ); // TODO: HSB, 2pi, 1., 1.?
+  colorMode( HSB, 1. );
   frameRate( defaultFr );
 
   background( 0. );
@@ -80,6 +87,11 @@ void setup() {
   dummy.beginDraw();
   dummy.background( color( 1. ) ); // 1: So that we'll still see an image with convolve
   dummy.endDraw();
+
+  // Load shaders
+  loadKernelShader();
+  brushOff();
+  loadDisplayShaders( true ); // true == load both
 
   // Rendering context is go!
   //
@@ -128,13 +140,6 @@ void setup() {
   // Audio analysis is go!
   //
 
-  //
-  // Load shaders
-
-  loadKernelShader();
-  brushOff();
-  loadDisplayShaders( true ); // true == load both
-
   // Load font for overlay
   olFont = createFont( "fonts/InputSansCondensed-Black.ttf", olFsize, true ); // true == antialiasing
   textAlign( RIGHT, TOP );
@@ -174,7 +179,19 @@ void draw() {
   shader( display );
   rect( 0, 0, width, height );
 
-  // FIXME VISUALIZER SHADER
+  // Power spectrum visualizer
+  if ( showPs ) {
+    resetShader();
+    float[] spec = ps.getFeatures();
+    for ( int i = 0 ; i < width ; ++i ) {
+      float sp = spec[ i * spec.length / width ]; // TODO -- aliasing?
+      float h = sp * ( hceil - hfloor ) + hfloor;
+      float s = sp * ( sceil - sfloor ) + sfloor;
+      float b = sp * ( bceil - bfloor ) + bfloor;
+      fill( h, s, b, .02 );
+      rect( i, height - 10, i + 1, height );
+    }
+  }
 
   if ( showFr ) displayFr(); // display framerate
 }
@@ -282,6 +299,9 @@ void keyPressed() {
   else if ( key == 'v' ) {
     showVideo = ! showVideo;
     display = showVideo ? convolve : noconvolve;
+  }
+  else if ( key == 's' ) {
+    showPs = ! showPs;
   }
   else if ( key == 'p' ) {
     showFr = ! showFr;
