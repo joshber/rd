@@ -50,21 +50,8 @@ void main() {
   vec3 c = rgb_hsb( texture2D( frame, fuv ).rgb );
 
   // Modify c components with k
+  //c.x = 1. - fract( c.x * k.y ); // Hue
   c.z = clamp( c.z * k.y, 0., 1. ); // Brightness
-
-  /* HSB target ranges
-  float hfloor = .1;
-  float hceil = 1.;
-  float sfloor = .5;
-  float sceil = 1.;
-  float bfloor = .3;
-  float bceil = 1.;
-
-  c.x = k.y * ( hceil - hfloor ) + hfloor;
-  c.y = k.y * ( sceil - sfloor ) + sfloor;
-  c.z = k.y * ( bceil - bfloor ) + bfloor;
-*/
-  // TODO: Add glitch and distortion effects
 
   gl_FragColor = vec4( hsb_rgb( c ), 1. );
 }

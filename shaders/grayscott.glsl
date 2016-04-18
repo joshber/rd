@@ -183,7 +183,7 @@ void main() {
 
   // Gray-Scott state space parameters
   // .062:.061 U-skate world
-  // .098:.056 Worms
+  // .098:.056 ??
   // .078:.061 Worms
   // .030:.062 Solitons
   // .025:.060 Pulsing solitons
@@ -195,8 +195,8 @@ void main() {
   // .018:.051 Spots and loops
   // .014:.045 Waves
 
-  float feed = .014;
-  float kill = .045;
+  float feed = .025;
+  float kill = .060;
 
   vec4 lpUV = torlp9( p, kernel, 1. ); // Laplacian
   vec2 lp = lpUV.xy;

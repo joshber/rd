@@ -4,7 +4,8 @@
 // 2016 CC BY-NC-ND 4.0
 
 // TODO
-// - Roll our own spectral centroid, spread, flatness ... but keep it simple
+// - Spectral envelope visualizer -- a way to start thinking about the feature space
+// - Spectral centroid, dispersion, flatness ...?
 // - Amplitude (loudness) modulates speed?
 // - On beats (spectral peaks), add a splotch to the kernel?
 
@@ -12,7 +13,7 @@
 // - Signaling among instances -- PDEs for nonparametric zeitgeber?
 // - Unsupervised learning
 
-import processing.sound.*;
+import beads.*;
 import processing.video.*;
 
 //
@@ -30,10 +31,14 @@ int brushRadius = 1<<3;
 //
 // Audio globals
 
-AudioIn ain;
-FFT fft;
-int nBands = 1 << 10;
-float[] spectrum = new float[ nBands ];
+AudioContext ac;
+ZeroCross zc;
+PowerSpectrum ps;
+SpectralPeaks sp;
+SpectralCentroid sc;
+SpectralDifference sd;
+PeakDetector pd;
+int nPeaks = 32;
 
 //
 // Overlay and UI globals
@@ -74,11 +79,49 @@ void setup() {
   brushOff();
   loadDisplayShaders( true ); // true == load both
 
-  // Audio analyzer
-  ain = new AudioIn( this, 0 );
-  fft = new FFT( this, nBands );
-  ain.start();
-  fft.input( ain );
+  //
+  // Set up audio in and analyzer
+
+  ac = new AudioContext();
+  float sampleRate = ac.getSampleRate();
+
+  UGen mic = ac.getAudioInput();
+
+  ShortFrameSegmenter sfs = new ShortFrameSegmenter( ac );
+  // TODO: set sfs chunk size and hop size
+  //sfs.setChunkSize( 1024 );
+  //sfs.setHopSize( 441 );
+  sfs.addInput( mic );
+
+  zc = new ZeroCross( ac, 200. ); // 200ms frame
+
+  FFT fft = new FFT();
+  sfs.addListener( fft );
+
+  ps = new PowerSpectrum();
+  fft.addListener( ps );
+
+  sp = new SpectralPeaks( ac, nPeaks );
+  ps.addListener( sp );
+
+  sc = new SpectralCentroid( sampleRate );
+  ps.addListener( sc );
+
+  sd = new SpectralDifference( sampleRate );
+  ps.addListener( sd );
+
+  // Beat detection
+  SpectralDifference sd = new SpectralDifference( ac.getSampleRate() );
+  ps.addListener( sd );
+  pd = new PeakDetector();
+  sd.addListener( pd );
+  // TODO: Add callback for beat event (Sonifying Processing, p. 116)
+
+  ac.out.addDependent( sfs );
+  ac.start();
+
+  // Audio analysis is go!
+  //
 
   // Load font for overlay
   olFont = createFont( "fonts/InputSansCondensed-Black.ttf", olFsize, true ); // true == antialiasing
@@ -115,7 +158,7 @@ void draw() {
   // Apply the kernel to the video or display the kernel itself
   display.set( "kernel", kbuf );
   if ( showVideo )
-    display.set( "frame", dummy );
+    display.set( "frame", video );
   shader( display );
   rect( 0, 0, width, height );
 
