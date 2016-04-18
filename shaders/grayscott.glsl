@@ -25,12 +25,12 @@ uniform vec2 brushP; // brush position
 //
 // Laplacians
 
-// Toroidal version TODO
+// Toroidal versions TODO
 // - Check correctness of toroidal versions
-// -- does not seem to be working in cases where the initial seed (i.e., brush) did not touch the edge
+//   -- does not seem to be working in cases where the initial seed (i.e., brush) did not touch the edge
 // - More efficient to incorporate the branches into the initial assignments?
 
-vec4 lp5( vec2 uv, float scale ) {
+vec4 lp5( vec2 uv, sampler2D k, float scale ) {
   vec3 p = vec3( scale / res, 0. );
 
   // Five-point stencil. Imagine a 3x3 grid labeled a-i. We're just taking the y±1 and x±1 points
@@ -39,13 +39,13 @@ vec4 lp5( vec2 uv, float scale ) {
   vec2 f = uv + p.xz;
   vec2 h = uv + p.zy;
 
-  vec4 UV = texture2D( kernel, uv );
+  vec4 UV = texture2D( k, uv );
 
   vec4 lp = ( 1. / ( scale * scale ) ) * (
-      texture2D( kernel, b )
-    + texture2D( kernel, d )
-    + texture2D( kernel, f )
-    + texture2D( kernel, h )
+      texture2D( k, b )
+    + texture2D( k, d )
+    + texture2D( k, f )
+    + texture2D( k, h )
     - UV * 4. );
 
   // By returning UV here, we obviate the need to resample the current fragment
@@ -54,7 +54,7 @@ vec4 lp5( vec2 uv, float scale ) {
 
 // Toroidal geometry
 // Thanks: http://mrob.com/pub/comp/screensavers/ (see function gray_scott 40 percent of the way down)
-vec4 torlp5( vec2 uv, float scale ) {
+vec4 torlp5( vec2 uv, sampler2D k, float scale ) {
   vec3 p = vec3( scale / res, 0. );
 
   // Five-point stencil. Imagine a 3x3 grid labeled a-i. We're just taking the y±1 and x±1 points
@@ -63,19 +63,19 @@ vec4 torlp5( vec2 uv, float scale ) {
   vec2 f = uv + p.xz;
   vec2 h = uv + p.zy;
 
-  // Wrap at the edges FIXME CHECK
+  // Wrap at the edges
   b.y += b.y < 0. ? 1. : 0.;
   d.x += d.x < 0. ? 1. : 0.;
   f.x -= f.x > 1. ? 1. : 0.;
   h.y -= h.y > 1. ? 1. : 0.;
 
-  vec4 UV = texture2D( kernel, uv );
+  vec4 UV = texture2D( k, uv );
 
   vec4 lp = ( 1. / ( scale * scale ) ) * (
-      texture2D( kernel, b )
-    + texture2D( kernel, d )
-    + texture2D( kernel, f )
-    + texture2D( kernel, h )
+      texture2D( k, b )
+    + texture2D( k, d )
+    + texture2D( k, f )
+    + texture2D( k, h )
     - UV * 4. );
 
   // By returning UV here, we obviate the need to resample the current fragment
@@ -88,7 +88,7 @@ vec4 torlp5( vec2 uv, float scale ) {
 // via https://en.wikipedia.org/wiki/Discrete_Laplace_operator
 // It agrees with the five-point
 
-vec4 lp9( vec2 uv, float scale ) {
+vec4 lp9( vec2 uv, sampler2D k, float scale ) {
   vec3 p = vec3( scale / res, 0. );
   vec3 q = vec3( p.x, -p.y, 0. );
 
@@ -102,17 +102,17 @@ vec4 lp9( vec2 uv, float scale ) {
   vec2 h = uv + p.zy;
   vec2 i = uv + p.xy;
 
-  vec4 UV = texture2D( kernel, uv );
+  vec4 UV = texture2D( k, uv );
 
   vec4 lp = ( 1. / 6. * ( scale * scale ) ) * (
-      texture2D( kernel, a )
-    + texture2D( kernel, b ) * 4.
-    + texture2D( kernel, c )
-    + texture2D( kernel, d ) * 4.
-    + texture2D( kernel, f ) * 4.
-    + texture2D( kernel, g )
-    + texture2D( kernel, h ) * 4.
-    + texture2D( kernel, i )
+      texture2D( k, a )
+    + texture2D( k, b ) * 4.
+    + texture2D( k, c )
+    + texture2D( k, d ) * 4.
+    + texture2D( k, f ) * 4.
+    + texture2D( k, g )
+    + texture2D( k, h ) * 4.
+    + texture2D( k, i )
     - UV * 20. );
 
   // By returning UV here, we obviate the need to resample the current fragment
@@ -120,7 +120,7 @@ vec4 lp9( vec2 uv, float scale ) {
 }
 
 // Toroidal geometry
-vec4 torlp9( vec2 uv, float scale ) {
+vec4 torlp9( vec2 uv, sampler2D k, float scale ) {
   vec3 p = vec3( scale / res, 0. );
   vec3 q = vec3( p.x, -p.y, 0. );
 
@@ -153,17 +153,17 @@ vec4 torlp9( vec2 uv, float scale ) {
   i.x -= i.x > 1. ? 1. : 0.;
   i.y -= i.y > 1. ? 1. : 0.;
 
-  vec4 UV = texture2D( kernel, uv );
+  vec4 UV = texture2D( k, uv );
 
   vec4 lp = ( 1. / 6. * ( scale * scale ) ) * (
-      texture2D( kernel, a )
-    + texture2D( kernel, b ) * 4.
-    + texture2D( kernel, c )
-    + texture2D( kernel, d ) * 4.
-    + texture2D( kernel, f ) * 4.
-    + texture2D( kernel, g )
-    + texture2D( kernel, h ) * 4.
-    + texture2D( kernel, i )
+      texture2D( k, a )
+    + texture2D( k, b ) * 4.
+    + texture2D( k, c )
+    + texture2D( k, d ) * 4.
+    + texture2D( k, f ) * 4.
+    + texture2D( k, g )
+    + texture2D( k, h ) * 4.
+    + texture2D( k, i )
     - UV * 20. );
 
   // By returning UV here, we obviate the need to resample the current fragment
@@ -216,7 +216,7 @@ void main() {
   float dr = 2.; // diffusion rate ratio, U:V
   float dt = 2.5; // time step
 
-  vec4 lpUV = torlp9( p, 1. ); // Laplacian
+  vec4 lpUV = torlp9( p, kernel, 1. ); // Laplacian
   vec2 lp = lpUV.xy;
   vec2 UV = lpUV.zw;
 

@@ -1,4 +1,4 @@
-// rd: Audio-driven procedural video with reactiond-diffusion models
+// rd: Audio-driven procedural video with reaction-diffusion models
 // Inspired by Mark IJzerman
 // Josh Berson, josh@joshberson.net
 // 2016 CC BY-NC-ND 4.0
@@ -7,24 +7,21 @@
 // - Add feed/kill gradients back in
 // - Toggle between video and G-S display -- 2 shaders?
 // - h/v Blur for second-level kernel -- toroidal!
-// - Power spectrum visualizer + fps
+// - (Log-binned?) power spectrum visualizer + spectral peaks + zero crossings + fps
+//   -- do it with a shader, just draw it on parts of the screen
 
-// - Convert video frame to G-S input: http://mrob.com/pub/comp/screensavers/
-// - OR, use the video frame for feed and kill rates, as MRob does
-
-// - ADD audio-drivenness
+// - Add audio-drivenness
 // - On beats (spectral peaks), add a splotch to the kernel?
 
 // TODO LATER
-// - Signaling among instances
+// - Signaling among instances -- PDEs for nonparametric zeitgeber?
 // - Unsupervised learning
 // - Beads and API compliance? Switch to PSound? Investigate PSound API
 
 import beads.*;
 import processing.video.*;
 
-PGraphics kbuf;
-PGraphics dummy;
+PGraphics kbuf, dummy;
 Movie video;
 int defaultFr = 60;
 
@@ -161,18 +158,15 @@ void draw() {
   convolve.set( "frame", dummy );
   shader( convolve );
   rect( 0, 0, width, height );
-
-  // TODO: Add a visualizer -- spectral peaks, power spectrum etc?
-  // Maybe an instantaneous power spectrum up the righthand side--log freq vertical, power by hue, 180 to 0 degrees in HSB
 }
 
 void loadKernelShader() {
-  kernel = loadShader( "shaders/grayscott.glsl" );
+  kernel = loadShader( "../shaders/grayscott.glsl" );
   kernel.set( "res", float( kbuf.width ), float( kbuf.height ) );
   kernel.set( "brushR", float( brushRadius ) );
 }
 void loadConvolveShader() {
-  convolve = loadShader( "shaders/convolve.glsl" );
+  convolve = loadShader( "../shaders/convolve.glsl" );
   convolve.set( "res", float( width ), float( height ) );
 }
 
