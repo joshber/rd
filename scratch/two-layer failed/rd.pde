@@ -4,6 +4,7 @@
 // 2016 CC BY-NC-ND 4.0
 
 // FIXME TODO
+// - h/v Blur for second-level kernel -- toroidal!
 // - Add feed/kill gradients back in
 // - Abstract UI signals from keyPressed()
 // - (Log-binned?) power spectrum visualizer + spectral peaks + zero crossings + fps
@@ -23,14 +24,16 @@ import processing.video.*;
 //
 // Rendering globals
 
-PGraphics kbuf, dummy;
+PGraphics kbuf, bbuf, dummy;
 Movie video;
 int defaultFr = 60;
 
-PShader kernel, convolve, noconvolve, display;
+PShader kernel, blurX, blurY, convolve, noconvolve, display;
 int kscale = 2; // larger == coarser-grained kernel
 
 int brushRadius = 1<<3;
+boolean twoLevel = false;
+float kWeight = .99; // relative weight of kernel levels 1 and 2, when two-level kernel is enabled
 
 //
 // Audio globals
@@ -74,6 +77,13 @@ void setup() {
   kbuf.colorMode( RGB, 1. );
   kbuf.background( color( 1., 0., 0. ) );
   kbuf.endDraw();
+
+  // Frame buffer to blur kbuf for a second, coarser-grained reaction-diffusion process
+  bbuf = createGraphics( width / kscale, height / kscale, P2D );
+  bbuf.beginDraw();
+  bbuf.colorMode( RGB, 1. );
+  bbuf.background( color( 0. ) );
+  bbuf.endDraw();
 
   // Stand-in for video during testing
   dummy = createGraphics( width, height, P2D );
@@ -135,6 +145,12 @@ void setup() {
   brushOff();
   loadDisplayShaders( true ); // true == load both
 
+  // These get loaded just once
+  blurX = loadShader( "../shaders/blurX.glsl" );
+  blurY = loadShader( "../shaders/blurY.glsl" );
+  blurX.set( "res", float( width / kscale ), float( height / kscale ) );
+  blurY.set( "res", float( width / kscale ), float( height / kscale ) );
+
   // Load font for overlay
   olFont = createFont( "fonts/InputSansCondensed-Black.ttf", olFsize, true ); // true == antialiasing
   textAlign( RIGHT, TOP );
@@ -158,7 +174,21 @@ void draw() {
   //
   // Update the kernel in an offscreen buffer
 
+  // FIXME FIXME CHECK -- Not working, might be here
+  if ( twoLevel ) {
+    blurX.set( "kernel", kbuf );
+    bbuf.beginDraw();
+    bbuf.shader( blurX );
+    bbuf.rect( 0, 0, bbuf.width, bbuf.height );
+
+    blurY.set( "blurX", bbuf );
+    bbuf.shader( blurY );
+    bbuf.rect( 0, 0, bbuf.width, bbuf.height );
+    bbuf.endDraw();
+  }
+
   kernel.set( "kernel", kbuf );
+  kernel.set( "blur", bbuf );
   kernel.set( "brushP", float( mouseX / kscale ), float( ( height - mouseY ) / kscale ) ); // (*)
     // (*) height - mouseY: Processing's y-axis is inverted wrt GLSL's
 
@@ -211,6 +241,7 @@ void displayFr() {
 void loadKernelShader() {
   kernel = loadShader( "../shaders/grayscott.glsl" );
   kernel.set( "res", float( kbuf.width ), float( kbuf.height ) );
+  kernel.set( "weight", twoLevel ? kWeight : 1. );
   kernel.set( "brushR", float( brushRadius ) );
 }
 void loadDisplayShaders( boolean both ) {
@@ -278,6 +309,10 @@ void keyPressed() {
   }
   else if ( key == 'r' ) {
     resetKernel();
+  }
+  else if ( key == '#' ) {
+    twoLevel = ! twoLevel;
+    kernel.set( "weight", twoLevel ? kWeight : 1. );
   }
   else if ( key == 'v' ) {
     showVideo = ! showVideo;

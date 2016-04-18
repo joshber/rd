@@ -3,7 +3,7 @@
 // Josh Berson, josh@joshberson.net
 // 2016 CC BY-NC-ND 4.0
 
-// convolve.glsl: Apply a kernel to a frame of video
+// noconvolve.glsl: Display a kernel, no convolution with a video frame
 
 #ifdef GL_ES
 precision mediump float;
@@ -13,7 +13,6 @@ precision mediump int;
 #define PROCESSING_COLOR_SHADER
 
 uniform sampler2D kernel;
-uniform sampler2D frame;
 uniform vec2 res; // viewport dimensions in pixels
 
 //
@@ -43,28 +42,24 @@ vec3 hsb_rgb( vec3 c ) {
 //
 
 void main() {
-  vec2 kuv = gl_FragCoord.xy / res;
-  vec2 fuv = vec2( kuv.x, 1. - kuv.y ); // Processing inverts y-axis in video
+  vec2 uv = gl_FragCoord.xy / res;
+  vec2 k = texture2D( kernel, uv ).xy;
 
-  vec2 k = texture2D( kernel, kuv ).xy;
-  vec3 c = rgb_hsb( texture2D( frame, fuv ).rgb );
+  //
+  // Display the reaction-diffusion pattern
 
-  // Modify c components with k
-  c.z = clamp( c.z * k.y, 0., 1. ); // Brightness
-
-  /* HSB target ranges
-  float hfloor = .1;
+  // HSB target ranges
+  float hfloor = .3;
   float hceil = 1.;
   float sfloor = .5;
   float sceil = 1.;
   float bfloor = .3;
   float bceil = 1.;
 
+  vec3 c;
   c.x = k.y * ( hceil - hfloor ) + hfloor;
   c.y = k.y * ( sceil - sfloor ) + sfloor;
   c.z = k.y * ( bceil - bfloor ) + bfloor;
-*/
-  // TODO: Add glitch and distortion effects
 
   gl_FragColor = vec4( hsb_rgb( c ), 1. );
 }

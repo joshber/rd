@@ -18,6 +18,9 @@ precision mediump int;
 uniform sampler2D kernel;
 uniform vec2 res; // kernel dimensions in pixels
 
+uniform sampler2D blur; // second-level kernel
+uniform float weight; // relative weight of kernel levels 1 and 2
+
 uniform bool brush;
 uniform float brushR; // brush radius
 uniform vec2 brushP; // brush position
@@ -217,6 +220,9 @@ void main() {
   float feed = .014;
   float kill = .045;
 
+  //
+  // Gray-Scott, level 1
+
   vec4 lpUV = torlp9( p, kernel, 1. ); // Laplacian
   vec2 lp = lpUV.xy;
   vec2 UV = lpUV.zw;
@@ -229,6 +235,23 @@ void main() {
   // Gray-Scott
   vec2 dUV = vec2(  ds * lp.x - UVV + feed * ( 1. - U ),
                     ds / dr * lp.y + UVV - ( feed + kill ) * V );
+
+  //
+  // G-S, level 2: Same thing, coarser granularity
+
+  float feed2 = .062;
+  float kill2 = .061;
+
+  lpUV = torlp9( p, blur, 1. ); // 3 == granularity of this process relative to level 1
+  lp = lpUV.xy;
+  vec2 UV2 = lpUV.zw;
+
+  U = UV2.x;
+  V = UV2.y;
+  UVV = U * V * V;
+
+  vec2 dUV2 = vec2( ds * lp.x - UVV + feed2 * ( 1. - U ),
+                    ds / dr * lp.y + UVV - ( feed2 + kill2 ) * V );
 
   //
   // Draw on the kernel if the brush is on
@@ -245,5 +268,8 @@ void main() {
   float br = brushR / res.x;
   UV.y = min( 1., UV.y + ( ( brush && bd < br ) ? .5 * exp( -bd * bd / ( 2. * br * br / 9. ) ) : 0. ) );
 
-  gl_FragColor = vec4( clamp( UV + dUV * dt, 0., 1. ), 0., 1. );
+  //vec2 newUV = UV + dUV * dt;
+  vec2 newUV = weight * ( UV + dUV * dt ) + ( 1. - weight ) * ( UV2 + dUV2 * dt );
+
+  gl_FragColor = vec4( clamp( newUV, 0., 1. ), 0., 1. );
 }
