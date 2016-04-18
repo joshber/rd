@@ -4,17 +4,15 @@
 // 2016 CC BY-NC-ND 4.0
 
 // TODO
-// - Log-binned power spectrum visualizer
-
-// - Add audio-drivenness
+// - Roll our own spectral centroid, spread, flatness ... but keep it simple
+// - Amplitude (loudness) modulates speed?
 // - On beats (spectral peaks), add a splotch to the kernel?
 
 // TODO LATER
 // - Signaling among instances -- PDEs for nonparametric zeitgeber?
 // - Unsupervised learning
-// - Beads and API compliance? Switch to PSound? Investigate PSound API
 
-import beads.*;
+import processing.sound.*;
 import processing.video.*;
 
 //
@@ -32,14 +30,10 @@ int brushRadius = 1<<3;
 //
 // Audio globals
 
-AudioContext ac;
-ZeroCross zc;
-PowerSpectrum ps;
-SpectralPeaks sp;
-SpectralCentroid sc;
-SpectralDifference sd;
-PeakDetector pd;
-int nPeaks = 32;
+AudioIn ain;
+FFT fft;
+int nBands = 1 << 10;
+float[] spectrum = new float[ nBands ];
 
 //
 // Overlay and UI globals
@@ -48,17 +42,7 @@ PFont olFont;
 float olFsize = 12.;
 
 boolean showVideo = false;
-boolean showPs = false;
 boolean showFr = false;
-
-// For power spectrum visualizer
-// FIXME TWEAK
-float hfloor = .5;
-float hceil = 1.;
-float sfloor = 1.;
-float sceil = 1.;
-float bfloor = 1.;
-float bceil = 1.;
 
 
 void setup() {
@@ -71,9 +55,6 @@ void setup() {
 
   background( 0. );
   noStroke();
-
-  //
-  // Set up an offscreen context for the kernel shader
 
   // Frame buffer for the reaction-diffusion kernel
   kbuf = createGraphics( width / kscale, height / kscale, P2D );
@@ -93,61 +74,20 @@ void setup() {
   brushOff();
   loadDisplayShaders( true ); // true == load both
 
-  // Rendering context is go!
-  //
-
-  //
-  // Set up audio in and analyzer
-
-  ac = new AudioContext();
-  float sampleRate = ac.getSampleRate();
-
-  UGen mic = ac.getAudioInput();
-
-  ShortFrameSegmenter sfs = new ShortFrameSegmenter( ac );
-  // TODO: set sfs chunk size and hop size
-  //sfs.setChunkSize( 1024 );
-  //sfs.setHopSize( 441 );
-  sfs.addInput( mic );
-
-  zc = new ZeroCross( ac, 200. ); // 200ms frame
-
-  FFT fft = new FFT();
-  sfs.addListener( fft );
-
-  ps = new PowerSpectrum();
-  fft.addListener( ps );
-
-  sp = new SpectralPeaks( ac, nPeaks );
-  ps.addListener( sp );
-
-  sc = new SpectralCentroid( sampleRate );
-  ps.addListener( sc );
-
-  sd = new SpectralDifference( sampleRate );
-  ps.addListener( sd );
-
-  // Beat detection
-  SpectralDifference sd = new SpectralDifference( ac.getSampleRate() );
-  ps.addListener( sd );
-  pd = new PeakDetector();
-  sd.addListener( pd );
-  // TODO: Add callback for beat event (Sonifying Processing, p. 116)
-
-  ac.out.addDependent( sfs );
-  ac.start();
-
-  // Audio analysis is go!
-  //
+  // Audio analyzer
+  ain = new AudioIn( this, 0 );
+  fft = new FFT( this, nBands );
+  ain.start();
+  fft.input( ain );
 
   // Load font for overlay
   olFont = createFont( "fonts/InputSansCondensed-Black.ttf", olFsize, true ); // true == antialiasing
   textAlign( RIGHT, TOP );
 
   // Start the video
-  //video = new Movie( this, "video/JLT 12 04 2016.mov" );
+  video = new Movie( this, "video/JLT 12 04 2016.mov" );
   // FIXME Disable audio? video.volume( 0 ) does not work
-  //video.loop();
+  video.loop();
 }
 
 void draw() {
@@ -178,20 +118,6 @@ void draw() {
     display.set( "frame", dummy );
   shader( display );
   rect( 0, 0, width, height );
-
-  // Power spectrum visualizer
-  if ( showPs ) {
-    resetShader();
-    float[] spec = ps.getFeatures();
-    for ( int i = 0 ; i < width ; ++i ) {
-      float sp = spec[ i * spec.length / width ]; // TODO -- aliasing?
-      float h = sp * ( hceil - hfloor ) + hfloor;
-      float s = sp * ( sceil - sfloor ) + sfloor;
-      float b = sp * ( bceil - bfloor ) + bfloor;
-      fill( h, s, b, .02 );
-      rect( i, height - 10, i + 1, height );
-    }
-  }
 
   if ( showFr ) displayFr(); // display framerate
 }
@@ -299,9 +225,6 @@ void keyPressed() {
   else if ( key == 'v' ) {
     showVideo = ! showVideo;
     display = showVideo ? convolve : noconvolve;
-  }
-  else if ( key == 's' ) {
-    showPs = ! showPs;
   }
   else if ( key == 'p' ) {
     showFr = ! showFr;

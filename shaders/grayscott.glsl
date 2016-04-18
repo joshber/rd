@@ -173,25 +173,6 @@ vec4 torlp9( vec2 uv, sampler2D k, float scale ) {
 // End of Laplacians
 //
 
-//
-// Gradients
-// I.e., to systematically vary feed and kill across the kernel
-
-float linear( float x, float a, float b ) {
-  return b + x * ( a - b );
-}
-
-float exponential( float x, float e, float a ) {
-  return x * a * exp( e );
-}
-
-float gaussian( float x, float mu, float sig ) {
-  return mu * exp( - x * x / ( 2 * sig * sig ) );
-}
-
-// End of gradients
-//
-
 void main() {
   vec2 p = gl_FragCoord.xy / res; // p instead of uv to avoid confusion (U and V are terms of the G-S PDEs)
 
