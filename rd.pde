@@ -4,12 +4,18 @@
 // 2016 CC BY-NC-ND 4.0
 
 // TODO
-// - Spectral envelope visualizer -- a way to start thinking about the feature space
-// - Spectral centroid, dispersion, flatness ...?
-// - Amplitude (loudness) modulates speed?
+// - Switch to Minim
+// brush => brushI
+// *** VISUALIZER -- spectrogram!
+// *** OR, switch to Minim
+//     use power for both dt and noise term
+// - Power modulates dt
+// - Zero crossings add a small noise term to dt
 // - On beats (spectral peaks), add a splotch to the kernel?
 
 // TODO LATER
+// - Implement Yang's algorithm -- two textures for the two sides of the kernel,
+//   or use wz if it's possible to get it back to Processing safely
 // - Signaling among instances -- PDEs for nonparametric zeitgeber?
 // - Unsupervised learning
 
@@ -33,12 +39,10 @@ int brushRadius = 1<<3;
 
 AudioContext ac;
 ZeroCross zc;
+Power power;
 PowerSpectrum ps;
-SpectralPeaks sp;
-SpectralCentroid sc;
 SpectralDifference sd;
 PeakDetector pd;
-int nPeaks = 32;
 
 //
 // Overlay and UI globals
@@ -47,6 +51,7 @@ PFont olFont;
 float olFsize = 12.;
 
 boolean showVideo = false;
+boolean justVideo = false;
 boolean showFr = false;
 
 
@@ -88,12 +93,14 @@ void setup() {
   UGen mic = ac.getAudioInput();
 
   ShortFrameSegmenter sfs = new ShortFrameSegmenter( ac );
-  // TODO: set sfs chunk size and hop size
-  //sfs.setChunkSize( 1024 );
-  //sfs.setHopSize( 441 );
+  // TODO: Tweak chunk size and hop size? setChunkSize() setHopSize()
   sfs.addInput( mic );
 
-  zc = new ZeroCross( ac, 200. ); // 200ms frame
+  zc = new ZeroCross( ac, 100. ); // 100ms frame
+  zc.addInput( sfs ); // FIXME -- NOT WORKING
+
+  power = new Power();
+  sfs.addListener( power );
 
   FFT fft = new FFT();
   sfs.addListener( fft );
@@ -101,21 +108,14 @@ void setup() {
   ps = new PowerSpectrum();
   fft.addListener( ps );
 
-  sp = new SpectralPeaks( ac, nPeaks );
-  ps.addListener( sp );
-
-  sc = new SpectralCentroid( sampleRate );
-  ps.addListener( sc );
-
   sd = new SpectralDifference( sampleRate );
   ps.addListener( sd );
 
   // Beat detection
-  SpectralDifference sd = new SpectralDifference( ac.getSampleRate() );
   ps.addListener( sd );
   pd = new PeakDetector();
   sd.addListener( pd );
-  // TODO: Add callback for beat event (Sonifying Processing, p. 116)
+  // TODO: Set threshold and alpha, add beat callback (Sonifying Processing, p. 116)
 
   ac.out.addDependent( sfs );
   ac.start();
@@ -150,17 +150,30 @@ void draw() {
   kernel.set( "brushP", float( mouseX / kscale ), float( ( height - mouseY ) / kscale ) ); // (*)
     // (*) height - mouseY: Processing's y-axis is inverted wrt GLSL's
 
+  kernel.set( "t", float( millis() ) );
+  Float p = power.getFeatures();
+  kernel.set( "power", p == null || p.isNaN() ? 0. : p.floatValue() );
+  kernel.set( "zc", zc.getValue() ); // FIXME CHECK!
+  zc.printInBuffers();
+  zc.printOutBuffers();
+
   kbuf.beginDraw();
   kbuf.shader( kernel );
   kbuf.rect( 0, 0, kbuf.width, kbuf.height );
   kbuf.endDraw();
 
-  // Apply the kernel to the video or display the kernel itself
-  display.set( "kernel", kbuf );
-  if ( showVideo )
-    display.set( "frame", video );
-  shader( display );
-  rect( 0, 0, width, height );
+  if ( justVideo ) {
+    resetShader();
+    image( video, 0, 0, width, height );
+  }
+  else {
+    // Apply the kernel to the video or display the kernel itself
+    display.set( "kernel", kbuf );
+    if ( showVideo )
+      display.set( "frame", video );
+      shader( display );
+      rect( 0, 0, width, height );
+  }
 
   if ( showFr ) displayFr(); // display framerate
 }
@@ -269,7 +282,17 @@ void keyPressed() {
     showVideo = ! showVideo;
     display = showVideo ? convolve : noconvolve;
   }
+  else if ( key == 'V' ) {
+    justVideo = ! justVideo;
+  }
   else if ( key == 'p' ) {
     showFr = ! showFr;
   }
+}
+
+//
+// Utilities
+
+float clamp( float x, float a, float b ) {
+  return min( max( x, a ), b );
 }

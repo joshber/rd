@@ -50,6 +50,10 @@ void main() {
   vec3 c = rgb_hsb( texture2D( frame, fuv ).rgb );
 
   // Modify c components with k
+  // TODO
+  // - Shift and scale k.y (Gray-Scott V concentration), e.g., to [1,1]
+  // - Scale c.xyz to specified HSB ranges
+
   //c.x = 1. - fract( c.x * k.y ); // Hue
   c.z = clamp( c.z * k.y, 0., 1. ); // Brightness
 

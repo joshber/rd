@@ -9,7 +9,7 @@
 // https://github.com/pmneila/jsexp / https://pmneila.github.io/jsexp/grayscott/
 
 #ifdef GL_ES
-precision mediump float;
+precision highp float;
 precision mediump int;
 #endif
 
@@ -18,9 +18,30 @@ precision mediump int;
 uniform sampler2D kernel;
 uniform vec2 res; // kernel dimensions in pixels
 
+// Audio signal features
+uniform vec3 audio; // ( RMS power 0–10KHz, 10–20KHz, time in ms )
+
 uniform bool brush;
 uniform float brushR; // brush radius
 uniform vec2 brushP; // brush position
+
+// FIXME TODO noise function
+// https://github.com/ashima/webgl-noise/blob/master/src/noise2D.glsl
+// https://stackoverflow.com/questions/12964279/whats-the-origin-of-this-glsl-rand-one-liner
+// https://stackoverflow.com/questions/4200224/random-noise-functions-for-glsl
+// https://www.shadertoy.com/view/ltB3zD
+
+//
+// Noise
+// https://stackoverflow.com/questions/4200224/random-noise-functions-for-glsl
+
+// (-1,1)
+float snoise( vec2 co ){
+    return fract( sin( dot( co.xy ,vec2( 12.9898,78.233 ) ) ) * 43758.5453 );
+}
+float rand( vec2 uv ) {
+  return snoise( vec2( uv.x * cos( t ), uv.y * sin( t ) ) );
+}
 
 //
 // Laplacians
@@ -177,11 +198,23 @@ void main() {
   vec2 p = gl_FragCoord.xy / res; // p instead of uv to avoid confusion (U and V are terms of the G-S PDEs)
 
   // Speed and scale parameters
-  float ds = .082; // diffusion rate scale. This confounded me for a week. Keep it low
-  float dr = 2.; // diffusion rate ratio, U:V
-  float dt = 2.5; // time step
+  float ds = .082; // diffusion rate scale. This confounded me for a week. Keep < .1. Better yet, leave it at .082
+  float dr = 2.; // diffusion rate ratio, U:V. Must be ≥2. >2, you get finer detail but it's more static. Keep in [2,10]
+  float dt = 2.5; // time step. Keep in [1,4). Above ~4 you get uncontrolled V growth, exposing the whole video
 
-  // Gray-Scott state space parameters
+  // TODO: dt and power ... zc and dt noise terms
+
+  /*/ dr and dt gradients -- systematically profile effects of different values
+  float drfloor = 2.;
+  float drceil = 10.;
+  float dtfloor = 1.;
+  float dtceil = 4.;
+  dr = p.x * ( drceil - drfloor ) + drfloor;
+  dt = p.y * ( dtceil - dtfloor ) + dtfloor; //*/
+
+  // Gray-Scott state space parameters. Cf.
+  // - http://mrob.com/pub/comp/xmorphia/
+  // - http://mrob.com/pub/comp/xmorphia/pde-uc-classes.html
   // .062:.061 U-skate world
   // .098:.056 ??
   // .078:.061 Worms
