@@ -21,15 +21,8 @@ uniform vec2 res; // kernel dimensions in pixels
 // Audio signal features
 uniform vec3 audio; // ( RMS power 0–10KHz, 10–20KHz, time in ms )
 
-uniform float brushI; // intensity
-uniform float brushR; // radius
-uniform vec2 brushP; // position
-
-// FIXME TODO noise function
-// https://github.com/ashima/webgl-noise/blob/master/src/noise2D.glsl
-// https://stackoverflow.com/questions/12964279/whats-the-origin-of-this-glsl-rand-one-liner
-// https://stackoverflow.com/questions/4200224/random-noise-functions-for-glsl
-// https://www.shadertoy.com/view/ltB3zD
+// Paintbrush -- also used for audio(beat)-generated splotches
+uniform vec4 brush; // ( x, y, intensity, radius )
 
 //
 // Noise
@@ -202,7 +195,7 @@ void main() {
   float dr = 2.; // diffusion rate ratio, U:V. Must be ≥2. >2, you get finer detail but it's more static. Keep in [2,10]
   float dt = 2.5; // time step. Keep in [1,4). Above ~4 you get uncontrolled V growth, exposing the whole video
 
-  // TODO: dt and power ... zc and dt noise terms
+  // TODO: dt and power
 
   /*/ dr and dt gradients -- systematically profile effects of different values
   float drfloor = 2.;
@@ -254,10 +247,10 @@ void main() {
   // Edge geometry is not toroidal, but that would be more work, computationally,
   // than it'd be worth at this stage
 
-  vec2 bdiff = ( gl_FragCoord.xy - brushP ) / res.x;
+  vec2 bdiff = ( gl_FragCoord.xy - brush.xy ) / res.x;
   float bd = sqrt( dot( bdiff, bdiff ) );
-  float br = brushR / res.x;
-  UV.y = min( 1., UV.y + brushI * ( bd < br  ? .5 * exp( -bd * bd / ( 2. * br * br / 9. ) ) : 0. ) );
+  float br = brush.w / res.x;
+  UV.y = min( 1., UV.y + brush.z * ( bd < br  ? .5 * exp( -bd * bd / ( 2. * br * br / 9. ) ) : 0. ) );
 
   gl_FragColor = vec4( clamp( UV + dUV * dt, 0., 1. ), 0., 1. );
 }

@@ -145,9 +145,8 @@ void draw() {
   // Update the kernel in an offscreen buffer
 
   kernel.set( "kernel", kbuf );
-  kernel.set( "brushI", brushIntensity );
-  kernel.set( "brushP", float( mouseX / kscale ), float( ( height - mouseY ) / kscale ) ); // (*)
-    // (*) height - mouseY: Processing's y-axis is inverted wrt GLSL's
+  kernel.set( "brush", float( mouseX / kscale ), float( ( height - mouseY ) / kscale ), brushIntensity, brushRadius );
+    // height - mouseY: Processing's y-axis is inverted wrt GLSL's
 
   kbuf.beginDraw();
   kbuf.shader( kernel );
@@ -229,7 +228,6 @@ void loadDisplayShaders( boolean both ) {
 
 void setBrushRadius( int i ) {
   brushRadius = 1 << i;
-  kernel.set( "brushR", float( brushRadius ) );
 }
 void resetKernel() {
   kbuf.beginDraw();
