@@ -4,12 +4,12 @@
 // 2016 CC BY-NC-ND 4.0
 
 // TODO
-// - Switch to Minim
-// - Turn volume off with Minim
-// *** VISUALIZER -- spectrogram! -- 256 freq bins
+// - *** How can we make spectrogram frames independent of frame rate?
+// - *** How can we reduce latency?
+// - *** Beat splotching is waaay too sensitive. Need to raise thresholds
 // - Low range power modulates dt
 // - High range power adds small noise term to dt
-// - On beats (power peaks), add a splotch to the kernel, brushI fades with exponential decay
+// - FFT windowing
 
 // TODO LATER
 // - Signaling among instances -- PDEs for nonparametric zeitgeber?
@@ -17,40 +17,53 @@
 //   or use wz if it's possible to get it back to Processing safely
 // - Unsupervised learning
 
-import beads.*;
+import java.util.*; // ArrayDeque
+
+import ddf.minim.*;
+import ddf.minim.analysis.*;
+
 import processing.video.*;
 
 //
 // Rendering globals
 
-PGraphics kbuf, dummy;
+PGraphics kbuf;
 Movie video;
 int defaultFr = 60;
 
 PShader kernel, convolve, noconvolve, display;
 int kscale = 2; // larger == coarser-grained kernel
 
-int brushRadius = 1<<3;
 float brushIntensity = 0.;
+int brushRadius = 1<<3;
 
 //
 // Audio globals
 
-AudioContext ac;
-ZeroCross zc;
-Power power;
-PowerSpectrum ps;
-SpectralDifference sd;
-PeakDetector pd;
+Minim minim;
+AudioInput in;
+FFT fft;
+float fftBw; // FFT spectral bin bandwidth
+BeatDetect beat;
+
+ArrayDeque<float[]> sg; // spectrogram
+int sgSize;
+int sgFbins;
+boolean sgLog;
+
+// For actuating beats in the kernel
+PVector beatP;
+float beatIntensity, beatRadius;
 
 //
-// Overlay and UI globals
+// UI globals
 
 PFont olFont;
 float olFsize = 12.;
 
 boolean showVideo = false;
 boolean justVideo = false;
+boolean showSg = false;
 boolean showFr = false;
 
 
@@ -72,58 +85,15 @@ void setup() {
   kbuf.background( color( 1., 0., 0. ) );
   kbuf.endDraw();
 
-  // Stand-in for video during testing
-  dummy = createGraphics( width, height, P2D );
-  dummy.beginDraw();
-  dummy.background( color( 1. ) ); // 1: So that we'll still see an image with convolve
-  dummy.endDraw();
-
   // Load shaders
   loadKernelShader();
   loadDisplayShaders( true ); // true == load both
 
-  //
-  // Set up audio in and analyzer
-
-  ac = new AudioContext();
-  float sampleRate = ac.getSampleRate();
-
-  UGen mic = ac.getAudioInput();
-
-  ShortFrameSegmenter sfs = new ShortFrameSegmenter( ac );
-  // TODO: Tweak chunk size and hop size? setChunkSize() setHopSize()
-  sfs.addInput( mic );
-
-  zc = new ZeroCross( ac, 100. ); // 100ms frame
-  zc.addInput( sfs ); // FIXME -- NOT WORKING
-
-  power = new Power();
-  sfs.addListener( power );
-
-  FFT fft = new FFT();
-  sfs.addListener( fft );
-
-  ps = new PowerSpectrum();
-  fft.addListener( ps );
-
-  sd = new SpectralDifference( sampleRate );
-  ps.addListener( sd );
-
-  // Beat detection
-  ps.addListener( sd );
-  pd = new PeakDetector();
-  sd.addListener( pd );
-  // TODO: Set threshold and alpha, add beat callback (Sonifying Processing, p. 116)
-
-  ac.out.addDependent( sfs );
-  ac.start();
-
-  // Audio analysis is go!
-  //
-
   // Load font for overlay
   olFont = createFont( "fonts/InputSansCondensed-Black.ttf", olFsize, true ); // true == antialiasing
   textAlign( RIGHT, TOP );
+
+  setupAudio();
 
   // Start the video
   video = new Movie( this, "video/JLT 12 04 2016.mov" );
@@ -143,6 +113,8 @@ void draw() {
 
   //
   // Update the kernel in an offscreen buffer
+
+  analyzeAudio();
 
   kernel.set( "kernel", kbuf );
   kernel.set( "brush", float( mouseX / kscale ), float( ( height - mouseY ) / kscale ), brushIntensity, brushRadius );
@@ -166,11 +138,118 @@ void draw() {
       rect( 0, 0, width, height );
   }
 
+  if ( showSg ) displaySg(); // display spectrogram
   if ( showFr ) displayFr(); // display framerate
 }
 
 //
-// Overlays
+// Audio-related
+
+void setupAudio() {
+  minim = new Minim( this );
+  in = minim.getLineIn();
+  fft = new FFT( in.bufferSize(), in.sampleRate() );
+  println( fft.specSize() );
+  fftBw = in.sampleRate() / in.bufferSize();
+  beat = new BeatDetect();
+  beatP = new PVector( 0., 0. );
+  beatIntensity = 0.;
+  beatRadius = 0.;
+
+  sgSize = 60;
+  sgFbins = 240; // Will be 220 for log spectrogram -- see displaySg()
+  sgLog = false;
+  sg = new ArrayDeque<float[]>( sgSize + 1 ); // +1: For when we've added a new frame but not yet removed the oldest
+}
+
+// analyzeAudio()
+// In the past we've used AudioListeners
+// But doing it in the event loop might work just as well, since threading is not an issue
+// In the interest of encapsulating audio-related stuff, this fn sets uniforms in the kernel shader
+void analyzeAudio() {
+  // Power spectrum
+  fft.logAverages( 10000, 1 ); // min bandwidth == 10KHz (in practice, just two bands at the moment)
+  fft.forward( in.mix );
+
+  // Beat detection
+  beat.detect( in.mix );
+  if ( beat.isOnset() ) {
+    beatIntensity = random( 1., 2. );
+    beatP.x = random( kbuf.width );
+    beatP.y = random( kbuf.height );
+    beatRadius = random( width / 20., width / 8. );
+  }
+  else {
+    // Exponentional decay
+    beatIntensity = beatIntensity < .001 ? 0. : beatIntensity / 2.; // FIXME TUNE DECAY RATE!
+  }
+
+  // Update kernel uniforms
+  kernel.set( "power", fft.getAvg( 0 ), fft.getAvg( 1 ), millis() );
+  kernel.set( "beat", beatP.x, beatP.y, beatIntensity, beatRadius );
+}
+
+// displaySg()
+// TODO Uncouple display width from spectrogram buffer size
+// Atm, each entry in the queue represents data from a single draw() frame,
+// and we simply draw the spectrogram that many pixels wide
+void displaySg() {
+  resetShader();
+  pushStyle();
+
+  if ( sgLog )
+    fft.logAverages( 11, sgFbins / 12 ); // Assumes Fs == 44.1KHz, so 12 octaves to Nyquist frequency
+  else
+    fft.linAverages( sgFbins );
+
+  fft.forward( in.mix ); // compute newest power spectrum
+
+  // Add the newest power spectrum to the spectrogram
+  float[] frame = new float[ sgFbins ]; // FIXME: (*)
+  int n = min( sgFbins, fft.avgSize() ); // We reuse this below
+  for ( int i = 0 ; i < sgFbins ; ++i ) {
+    frame[ i ] = i < n ? fft.getAvg( i ) : 0.;
+  }
+  sg.add( frame );
+
+  // If the queue has reached its maximum size, remove the oldest frame of frequency data
+  if ( sg.size() > sgSize )
+    sg.remove();
+
+  // Hue and brightness vary by power
+  float hfloor = .5;
+  float hceil = 1.;
+  float bfloor = .5;
+  float bceil = 1.;
+
+  int i = 0;
+  for ( float[] f : sg ) {
+    float xOffset = width - ( sgSize + 1.5 * olFsize ) + i; // Draw from the left
+    for ( int k = 0 ; k < n ; ++k ) {
+      float yOffset = height - 1.5 * olFsize - k; // Draw from the bottom
+      float pow = f[ k ];
+      float h = pow * ( hceil - hfloor ) + hfloor;
+      float b = pow * ( bceil - bfloor ) + bfloor;
+      fill( h, 1., b, .75 ); // Show the power
+      rect( xOffset, yOffset, 1, 1 );
+    }
+    ++i;
+  }
+  // If the spectrogram queue is empty and we have not yet filled the plot region, fill it out
+  for ( ; i < sgSize ; ++i ) {
+    float xOffset = width - ( sgSize + 1.5 * olFsize ) + i; // Draw from the left
+    for ( int k = 0 ; k < n ; ++k ) {
+      float yOffset = height - 1.5 * olFsize - k; // Draw from the bottom
+      fill( 0., .75 ); // FIXME COLOR No data to show
+      rect( xOffset, yOffset, 1, 1 );
+    }
+  }
+
+  popStyle();
+}
+
+//
+// Additional UI overlays
 
 void displayFr() {
   String fps = String.format( "%.2f fps", frameRate );
@@ -181,16 +260,17 @@ void displayFr() {
   textFont( olFont );
   textSize( olFsize );
   textAlign( RIGHT, TOP );
-  float xEdge = width - 1.5 * olFsize;
+  float xOffset = width - 1.5 * olFsize;
+  float yOffset = 1.5 * olFsize;
 
   // Drop shadow
   translate( 1., 1. );
   fill( 0., .5 );
-  text( fps, xEdge, 1.5 * olFsize );
+  text( fps, xOffset, yOffset );
   translate( -1., -1. );
 
   fill( 1., 1. ); // text color
-  text( fps, xEdge, 1.5 * olFsize );
+  text( fps, xOffset, yOffset );
 
   popStyle();
 }
@@ -201,7 +281,6 @@ void displayFr() {
 void loadKernelShader() {
   kernel = loadShader( "../shaders/grayscott.glsl" );
   kernel.set( "res", float( kbuf.width ), float( kbuf.height ) );
-  kernel.set( "brushR", float( brushRadius ) );
 }
 void loadDisplayShaders( boolean both ) {
   if ( both ) {
@@ -226,9 +305,6 @@ void loadDisplayShaders( boolean both ) {
 //
 // Kernel management
 
-void setBrushRadius( int i ) {
-  brushRadius = 1 << i;
-}
 void resetKernel() {
   kbuf.beginDraw();
   kbuf.background( color( 1., 0., 0., 1. ) );
@@ -260,7 +336,7 @@ void keyPressed() {
     frameRate( defaultFr );
   }
   else if ( 'a' <= key && key <= 'f' ) {
-    setBrushRadius( int( key ) - int( 'a' ) + 1 );
+    brushRadius = 1 << ( int( key ) - int( 'a' ) + 1 );
   }
   else if ( key == 'r' ) {
     resetKernel();
@@ -274,6 +350,12 @@ void keyPressed() {
   }
   else if ( key == 'p' ) {
     showFr = ! showFr;
+  }
+  else if ( key == 'g' ) {
+    showSg = ! showSg;
+  }
+  else if ( key == 'G' ) {
+    sgLog = ! sgLog;
   }
 }
 

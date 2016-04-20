@@ -19,10 +19,11 @@ uniform sampler2D kernel;
 uniform vec2 res; // kernel dimensions in pixels
 
 // Audio signal features
-uniform vec3 audio; // ( RMS power 0–10KHz, 10–20KHz, time in ms )
+uniform vec3 power; // ( RMS power 0–10KHz, 10–20KHz, running time in ms )
 
-// Paintbrush -- also used for audio(beat)-generated splotches
+// Paintbrushes. Simplifies things on the controller side to keep these separate
 uniform vec4 brush; // ( x, y, intensity, radius )
+uniform vec4 beat; // ( x, y, intensity, radius )
 
 //
 // Noise
@@ -33,15 +34,13 @@ float snoise( vec2 co ){
     return fract( sin( dot( co.xy ,vec2( 12.9898,78.233 ) ) ) * 43758.5453 );
 }
 float rand( vec2 uv ) {
-  return snoise( vec2( uv.x * cos( audio.z ), uv.y * sin( audio.z ) ) );
+  return snoise( vec2( uv.x * cos( power.z ), uv.y * sin( power.z ) ) );
 }
 
 //
 // Laplacians
 
 // Toroidal versions TODO
-// - Check correctness of toroidal versions
-//   -- does not seem to be working in cases where the initial seed (i.e., brush) did not touch the edge
 // - More efficient to incorporate the branches into the initial assignments?
 
 vec4 lp5( vec2 uv, sampler2D k, float scale ) {
@@ -238,7 +237,7 @@ void main() {
                     ds / dr * lp.y + UVV - ( feed + kill ) * V );
 
   //
-  // Draw on the kernel if the brush is on
+  // Draw on the kernel if the brush is on or we're in the decay shadow of a sound energy spike (beat)
   // One stroke raises the V concentration by .5 at the center,
   // with Gaussian falloff (sd = 1/3 brush radius),
   // clamped at 1
@@ -251,6 +250,11 @@ void main() {
   float bd = sqrt( dot( bdiff, bdiff ) );
   float br = brush.w / res.x;
   UV.y = min( 1., UV.y + brush.z * ( bd < br  ? .5 * exp( -bd * bd / ( 2. * br * br / 9. ) ) : 0. ) );
+
+  bdiff = ( gl_FragCoord.xy - beat.xy ) / res.x;
+  bd = sqrt( dot( bdiff, bdiff ) );
+  br = beat.w / res.x;
+  UV.y = min( 1., UV.y + beat.z * ( bd < br  ? .5 * exp( -bd * bd / ( 2. * br * br / 9. ) ) : 0. ) );
 
   gl_FragColor = vec4( clamp( UV + dUV * dt, 0., 1. ), 0., 1. );
 }
