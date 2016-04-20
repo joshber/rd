@@ -21,9 +21,9 @@ uniform vec2 res; // kernel dimensions in pixels
 // Audio signal features
 uniform vec3 audio; // ( RMS power 0–10KHz, 10–20KHz, time in ms )
 
-uniform bool brush;
-uniform float brushR; // brush radius
-uniform vec2 brushP; // brush position
+uniform float brushI; // intensity
+uniform float brushR; // radius
+uniform vec2 brushP; // position
 
 // FIXME TODO noise function
 // https://github.com/ashima/webgl-noise/blob/master/src/noise2D.glsl
@@ -40,7 +40,7 @@ float snoise( vec2 co ){
     return fract( sin( dot( co.xy ,vec2( 12.9898,78.233 ) ) ) * 43758.5453 );
 }
 float rand( vec2 uv ) {
-  return snoise( vec2( uv.x * cos( t ), uv.y * sin( t ) ) );
+  return snoise( vec2( uv.x * cos( audio.z ), uv.y * sin( audio.z ) ) );
 }
 
 //
@@ -257,7 +257,7 @@ void main() {
   vec2 bdiff = ( gl_FragCoord.xy - brushP ) / res.x;
   float bd = sqrt( dot( bdiff, bdiff ) );
   float br = brushR / res.x;
-  UV.y = min( 1., UV.y + ( ( brush && bd < br ) ? .5 * exp( -bd * bd / ( 2. * br * br / 9. ) ) : 0. ) );
+  UV.y = min( 1., UV.y + brushI * ( bd < br  ? .5 * exp( -bd * bd / ( 2. * br * br / 9. ) ) : 0. ) );
 
   gl_FragColor = vec4( clamp( UV + dUV * dt, 0., 1. ), 0., 1. );
 }

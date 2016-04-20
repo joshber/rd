@@ -5,18 +5,16 @@
 
 // TODO
 // - Switch to Minim
-// brush => brushI
-// *** VISUALIZER -- spectrogram!
-// *** OR, switch to Minim
-//     use power for both dt and noise term
-// - Power modulates dt
-// - Zero crossings add a small noise term to dt
-// - On beats (spectral peaks), add a splotch to the kernel?
+// - Turn volume off with Minim
+// *** VISUALIZER -- spectrogram! -- 256 freq bins
+// - Low range power modulates dt
+// - High range power adds small noise term to dt
+// - On beats (power peaks), add a splotch to the kernel, brushI fades with exponential decay
 
 // TODO LATER
+// - Signaling among instances -- PDEs for nonparametric zeitgeber?
 // - Implement Yang's algorithm -- two textures for the two sides of the kernel,
 //   or use wz if it's possible to get it back to Processing safely
-// - Signaling among instances -- PDEs for nonparametric zeitgeber?
 // - Unsupervised learning
 
 import beads.*;
@@ -33,6 +31,7 @@ PShader kernel, convolve, noconvolve, display;
 int kscale = 2; // larger == coarser-grained kernel
 
 int brushRadius = 1<<3;
+float brushIntensity = 0.;
 
 //
 // Audio globals
@@ -81,7 +80,6 @@ void setup() {
 
   // Load shaders
   loadKernelShader();
-  brushOff();
   loadDisplayShaders( true ); // true == load both
 
   //
@@ -147,15 +145,9 @@ void draw() {
   // Update the kernel in an offscreen buffer
 
   kernel.set( "kernel", kbuf );
+  kernel.set( "brushI", brushIntensity );
   kernel.set( "brushP", float( mouseX / kscale ), float( ( height - mouseY ) / kscale ) ); // (*)
     // (*) height - mouseY: Processing's y-axis is inverted wrt GLSL's
-
-  kernel.set( "t", float( millis() ) );
-  Float p = power.getFeatures();
-  kernel.set( "power", p == null || p.isNaN() ? 0. : p.floatValue() );
-  kernel.set( "zc", zc.getValue() ); // FIXME CHECK!
-  zc.printInBuffers();
-  zc.printOutBuffers();
 
   kbuf.beginDraw();
   kbuf.shader( kernel );
@@ -235,9 +227,6 @@ void loadDisplayShaders( boolean both ) {
 //
 // Kernel management
 
-void brushOff() {
-  kernel.set( "brush", false );
-}
 void setBrushRadius( int i ) {
   brushRadius = 1 << i;
   kernel.set( "brushR", float( brushRadius ) );
@@ -256,13 +245,13 @@ void movieEvent( Movie m ) {
 }
 
 void mouseDragged() {
-  kernel.set( "brush", true );
+  brushIntensity = 1.;
 }
 void mouseMoved() {
-  brushOff();
+  brushIntensity = 0.;
 }
 void mouseReleased() {
-  brushOff();
+  brushIntensity = 0.;
 }
 
 void keyPressed() {
