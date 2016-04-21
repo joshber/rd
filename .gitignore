@@ -1,4 +1,4 @@
 **/video
 *.mov
 *.mpg
-**/scratch
+**/scratch/**
