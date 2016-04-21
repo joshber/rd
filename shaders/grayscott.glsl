@@ -19,7 +19,8 @@ uniform sampler2D kernel;
 uniform vec2 res; // kernel dimensions in pixels
 
 // Audio signal features
-uniform vec3 power; // ( RMS power 0–10KHz, 10–20KHz, running time in ms )
+uniform vec3 sound; // (dB 0–10KHz, 10–20KHz, running time in ms)
+  // N.b., dB scaled to [0,1], i.e., 60dB is .5, 120dB 1.0
 
 // Paintbrushes. Simplifies things on the controller side to keep these separate
 uniform vec4 brush; // ( x, y, intensity, radius )
@@ -34,7 +35,7 @@ float snoise( vec2 co ){
     return fract( sin( dot( co.xy ,vec2( 12.9898,78.233 ) ) ) * 43758.5453 );
 }
 float rand( vec2 uv ) {
-  return snoise( vec2( uv.x * cos( power.z ), uv.y * sin( power.z ) ) );
+  return snoise( vec2( uv.x * cos( sound.z ), uv.y * sin( sound.z ) ) );
 }
 
 //
@@ -194,7 +195,20 @@ void main() {
   float dr = 2.; // diffusion rate ratio, U:V. Must be ≥2. >2, you get finer detail but it's more static. Keep in [2,10]
   float dt = 2.5; // time step. Keep in [1,4). Above ~4 you get uncontrolled V growth, exposing the whole video
 
-  // TODO: dt and power
+  // The louder the environment, the faster the simulation runs
+  // sound.x is dB sound intensity for frequencies up to 10KHz, scaled to [0,1]
+  float dtfloor = 1.;
+  float dtceil = 4.;
+  dt = sound.x * ( dtceil - dtfloor ) + dtfloor;
+
+  // The noisier the environment, the more local variation in the texture of the pattern
+  // sound.y is dB sound intensity for frequencies above 10KHz, scaled to [0,1]
+  float error = ( rand( p ) + 1. ) / 2.; // random error term in [0,1]
+  dr += sound.y * error;
+
+  // Alternate: The noisier, the more local variation in the speed. Can lead to rapid extinction
+  //float error = rand( p );
+  //dt += sound.y * error;
 
   /*/ dr and dt gradients -- systematically profile effects of different values
   float drfloor = 2.;
@@ -220,8 +234,8 @@ void main() {
   // .018:.051 Spots and loops
   // .014:.045 Waves
 
-  float feed = .025;
-  float kill = .060;
+  float feed = .062;
+  float kill = .061;
 
   vec4 lpUV = torlp9( p, kernel, 1. ); // Laplacian
   vec2 lp = lpUV.xy;

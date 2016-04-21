@@ -4,15 +4,16 @@
 // 2016 CC BY-NC-ND 4.0
 
 // TODO
-// - *** How can we make spectrogram frames independent of frame rate?
-// - *** How can we reduce latency?
-// - *** Beat splotching is waaay too sensitive. Need to raise thresholds
-// - Low range power modulates dt
-// - High range power adds small noise term to dt
+// - *** Adjust sensitivity of beat detection
+// - *** NEED A BETTER WAY TO DO LOG SPECTROGRAM
 // - FFT windowing
+// - Pass framerate to kernel to compensate, i.e., adjust dt to maintain constant speed in the R-D process?
+// - Centroid in spectrogram
+// - How can we make spectrogram frames independent of frame rate?
 
 // TODO LATER
 // - Signaling among instances -- PDEs for nonparametric zeitgeber?
+// - Break out spectrogram as an AudioListener
 // - Implement Yang's algorithm -- two textures for the two sides of the kernel,
 //   or use wz if it's possible to get it back to Processing safely
 // - Unsupervised learning
@@ -43,13 +44,17 @@ int brushRadius = 1<<3;
 Minim minim;
 AudioInput in;
 FFT fft;
-float fftBw; // FFT spectral bin bandwidth
+final float log10 = log( 10. ); // For converting amplitudes to dB
+//float fftBw; // FFT spectral bin bandwidth
 BeatDetect beat;
 
-ArrayDeque<float[]> sg; // spectrogram
-int sgSize;
-int sgFbins;
-boolean sgLog;
+// Spectrogram!
+ArrayDeque<int[]> sg;
+final int sgSize = 60;
+final int sgFbins = 240; // Will be a little less for log spectrogram -- see displaySg()
+color[] sgColor;
+final float sgAlpha = .75;
+boolean sgLog = false; // Logarithmic frequency axis?
 
 // For actuating beats in the kernel
 PVector beatP;
@@ -66,13 +71,17 @@ boolean justVideo = false;
 boolean showSg = false;
 boolean showFr = false;
 
+// Does ambient sound influence the R-D process?
+boolean actuateSpectral = false;
+boolean actuateBeats = false;
+
 
 void setup() {
   size( 1280, 720, P2D );
   //fullScreen( P2D /*FX2D*/, 1 );
   //pixelDensity( 2 );
 
-  colorMode( HSB, 1. );
+  colorMode( RGB, 1. );
   frameRate( defaultFr );
 
   background( 0. );
@@ -102,13 +111,13 @@ void setup() {
 }
 
 void draw() {
-  // Reload shaders every 1s
-  int fc = frameCount % 60;
-  if ( fc == 30 ) {
+  // Reload shaders every 2s
+  int fc = frameCount % 120;
+  if ( fc == 60 ) {
     loadKernelShader();
   }
-  else if ( fc == 59 ) {
-    loadDisplayShaders( false );
+  else if ( fc == 119 ) {
+    loadDisplayShaders( false ); // only reload the display shader currently in use
   }
 
   //
@@ -148,18 +157,38 @@ void draw() {
 void setupAudio() {
   minim = new Minim( this );
   in = minim.getLineIn();
+
+  // TODO: Experiment with windows
   fft = new FFT( in.bufferSize(), in.sampleRate() );
-  println( fft.specSize() );
-  fftBw = in.sampleRate() / in.bufferSize();
+  fft.window( FFT.HAMMING );
+  //fftBw = in.sampleRate() / in.bufferSize();
+
   beat = new BeatDetect();
   beatP = new PVector( 0., 0. );
   beatIntensity = 0.;
   beatRadius = 0.;
 
-  sgSize = 60;
-  sgFbins = 240; // Will be 220 for log spectrogram -- see displaySg()
-  sgLog = false;
-  sg = new ArrayDeque<float[]>( sgSize + 1 ); // +1: For when we've added a new frame but not yet removed the oldest
+  //
+  // Set up the spectrogram!
+
+  sg = new ArrayDeque<int[]>( sgSize + 1 ); // +1: For when we've added a new frame but not yet removed the oldest
+
+  //
+  // To get a good-looking spectrogram, you need to use stop colors
+  // TODO More dynamic range in the low end?
+
+  sgColor = new color[ 240 ];
+  int i;
+  for ( i = 0 ; i < 20 ; ++i )
+    sgColor[ i ] = color( 0., sgAlpha ); // < 10dB: black
+  for ( ; i < 100 ; ++i )
+    sgColor[ i ] = color( 0., 0., ( i - 19 ) / 80., sgAlpha ); // 10–49dB: black to blue
+  for ( ; i < 140 ; ++i )
+    sgColor[ i ] = color( ( i - 99 ) / 40., 0., ( 139 - i ) / 40., sgAlpha ); // 50–69dB: blue to red
+  for ( ; i < 180 ; ++i )
+    sgColor[ i ] = color( 1., ( i - 139 ) / 40., 0., sgAlpha ); // 70–89dB: red to yellow
+  for ( ; i < 240 ; ++i )
+    sgColor[ i ] = color( ( i - 179 ) / 60., 1., ( i - 179 ) / 60., sgAlpha ); // 90–120dB: yellow to white
 }
 
 // analyzeAudio()
@@ -167,26 +196,46 @@ void setupAudio() {
 // But doing it in the event loop might work just as well, since threading is not an issue
 // In the interest of encapsulating audio-related stuff, this fn sets uniforms in the kernel shader
 void analyzeAudio() {
-  // Power spectrum
-  fft.logAverages( 10000, 1 ); // min bandwidth == 10KHz (in practice, just two bands at the moment)
-  fft.forward( in.mix );
+  if ( actuateSpectral ) {
+    // Just two bands, low and high, split around 10KHz (assuming sample freq of 44.1KHz)
+    fft.linAverages( 2 );
+    fft.forward( in.mix );
+    float amp0 = fft.getAvg( 0 );
+    float amp1 = fft.getAvg( 1 );
 
-  // Beat detection
-  beat.detect( in.mix );
-  if ( beat.isOnset() ) {
-    beatIntensity = random( 1., 2. );
-    beatP.x = random( kbuf.width );
-    beatP.y = random( kbuf.height );
-    beatRadius = random( width / 20., width / 8. );
+    //
+    // Convert to Bels, then rescale to [0,1] ( · 10/120 or simply /12)
+    // TODO: /1e-10 instead of 1e-12 bc it looks like Minim is returning amplitudes in e-2 units
+    // -- scaling down two orders of magnitude yields more plausible dB values
+
+    float db0 = clamp( log( amp0 * amp0 / 1e-10 ) / log10 / 12., 0., 1. );
+    float db1 = clamp( log( amp1 * amp1 / 1e-10 ) / log10 / 12., 0., 1. );
+
+    kernel.set( "sound", db0, db1, float( millis() ) );
   }
   else {
-    // Exponentional decay
-    beatIntensity = beatIntensity < .001 ? 0. : beatIntensity / 2.; // FIXME TUNE DECAY RATE!
+    // We pass in 60dB when there's no actuation to indicate “medium speed”
+    kernel.set( "sound", .5, 0., 0. );
   }
 
-  // Update kernel uniforms
-  kernel.set( "power", fft.getAvg( 0 ), fft.getAvg( 1 ), millis() );
-  kernel.set( "beat", beatP.x, beatP.y, beatIntensity, beatRadius );
+  if ( actuateBeats ) {
+    // Beat detection
+    beat.detect( in.mix );
+    if ( beat.isOnset() ) {
+      beatIntensity = 1.;
+      beatP.x = random( kbuf.width );
+      beatP.y = random( kbuf.height );
+      beatRadius = random( width / 20., width / 10. );
+    }
+    else {
+      // Exponentional decay -- TODO Tune decay gamma
+      beatIntensity = beatIntensity < .001 ? 0. : beatIntensity / 2.;
+    }
+    kernel.set( "beat", beatP.x, beatP.y, beatIntensity, beatRadius );
+  }
+  else {
+    kernel.set( "beat", 0., 0., 0., 0. );
+  }
 }
 
 // displaySg()
@@ -194,6 +243,8 @@ void analyzeAudio() {
 // Atm, each entry in the queue represents data from a single draw() frame,
 // and we simply draw the spectrogram that many pixels wide
 void displaySg() {
+  final int stretch = 5;
+
   resetShader();
   pushStyle();
 
@@ -202,13 +253,23 @@ void displaySg() {
   else
     fft.linAverages( sgFbins );
 
-  fft.forward( in.mix ); // compute newest power spectrum
+  fft.forward( in.mix ); // compute newest spectrum
 
-  // Add the newest power spectrum to the spectrogram
-  float[] frame = new float[ sgFbins ]; // FIXME: (*)
+  // Add the newest spectrum to the spectrogram
+  int[] frame = new int[ sgFbins ];
   int n = min( sgFbins, fft.avgSize() ); // We reuse this below
   for ( int i = 0 ; i < sgFbins ; ++i ) {
-    frame[ i ] = i < n ? fft.getAvg( i ) : 0.;
+    if ( i < n ) {
+      // TODO: /1e-10 instead of 1e-12 bc it looks like Minim is returning amplitudes in e-2 units
+      // -- scaling down two orders of magnitude yields more plausible dB values
+      float amp = fft.getAvg( i );
+      int db2 = floor( 20. * log( amp * amp / 1e-10 ) / log10 ); // Convert to decibels(*)
+      frame[ i ] = min( max( 0, db2 ), 239 );
+      // (*) Actually 2·dB, which is 10·log10(intensity / 1e-12 W/m2). We use a 240-color range, so 2·
+    }
+    else
+      frame[ i ] = 0;
+      // if n < sgFbins (i.e., we're in log spectrum mode), zero out the fbin headroom in case we switch to linear
   }
   sg.add( frame );
 
@@ -216,32 +277,23 @@ void displaySg() {
   if ( sg.size() > sgSize )
     sg.remove();
 
-  // Hue and brightness vary by power
-  float hfloor = .5;
-  float hceil = 1.;
-  float bfloor = .5;
-  float bceil = 1.;
-
   int i = 0;
-  for ( float[] f : sg ) {
-    float xOffset = width - ( sgSize + 1.5 * olFsize ) + i; // Draw from the left
+  for ( int[] f : sg ) {
+    float xOffset = width - ( sgSize * stretch + 1.5 * olFsize ) + i * stretch; // Draw from the left
     for ( int k = 0 ; k < n ; ++k ) {
       float yOffset = height - 1.5 * olFsize - k; // Draw from the bottom
-      float pow = f[ k ];
-      float h = pow * ( hceil - hfloor ) + hfloor;
-      float b = pow * ( bceil - bfloor ) + bfloor;
-      fill( h, 1., b, .75 ); // Show the power
-      rect( xOffset, yOffset, 1, 1 );
+      fill( sgColor[ f[ k ] ] );
+      rect( xOffset, yOffset, stretch, 1 );
     }
     ++i;
   }
   // If the spectrogram queue is empty and we have not yet filled the plot region, fill it out
   for ( ; i < sgSize ; ++i ) {
-    float xOffset = width - ( sgSize + 1.5 * olFsize ) + i; // Draw from the left
+    float xOffset = width - ( sgSize * stretch + 1.5 * olFsize ) + i * stretch; // Draw from the left
     for ( int k = 0 ; k < n ; ++k ) {
       float yOffset = height - 1.5 * olFsize - k; // Draw from the bottom
-      fill( 0., .75 ); // FIXME COLOR No data to show
-      rect( xOffset, yOffset, 1, 1 );
+      fill( 0., sgAlpha );
+      rect( xOffset, yOffset, stretch, 1 );
     }
   }
 
@@ -329,7 +381,13 @@ void mouseReleased() {
 }
 
 void keyPressed() {
-  if ( '1' <= key && key <= '9' ) {
+  if ( key == 'A' ) {
+    actuateSpectral = ! actuateSpectral;
+  }
+  else if ( key == 'B' ) {
+    actuateBeats = ! actuateBeats;
+  }
+  else if ( '1' <= key && key <= '9' ) {
     frameRate( int( key ) - int( '0' ) );
   }
   else if ( key == ' ' ) {
