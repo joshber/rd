@@ -5,9 +5,11 @@
 
 // TODO
 // - !!! Signaling among instances -- PDEs for nonparametric zeitgeber?
+// - Investigate additional G-S feed/kill ratios
+// - Tune dr noise term in grayscott.glsl -- maybe [0,3] instead of [0,6]
+// - Tune beat detection
 
 // TODO LATER
-// - Tune sensitivity of beat detection
 // - Tune FFT windowing
 // - Break out spectrogram as an AudioListener
 // - Spectrogram frames independent of frame rate?

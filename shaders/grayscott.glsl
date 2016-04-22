@@ -15,6 +15,26 @@ precision mediump int;
 
 #define PROCESSING_COLOR_SHADER
 
+//
+// Gray-Scott state space parameters. Cf.
+// - http://mrob.com/pub/comp/xmorphia/
+// - http://mrob.com/pub/comp/xmorphia/pde-uc-classes.html
+// - https://pmneila.github.io/jsexp/grayscott/
+
+const vec2
+USKATE      = vec2( .062, .061 ), // U-skate world
+SOLITONS    = vec2( .030, .062 ), // Solitons
+PULSOLITONS = vec2( .025, .060 ), // Pulsing solitons
+WORMS       = vec2( .078, .061 ), // Worms
+MAZES       = vec2( .029, .057 ), // Mazes
+HOLES       = vec2( .039, .058 ), // Holes
+CHAOS       = vec2( .026, .051 ), // Chaos
+CHAOSHOLES  = vec2( .034, .056 ), // Chaos + holes
+MOVINGSPOTS = vec2( .014, .054 ), // Moving spots
+SPOTSLOOPS  = vec2( .018, .051 ), // Spots and loops
+WAVES       = vec2( .014, .045 ), // Waves
+MOREWORMS   = vec2( .098, .056 ); // ???
+
 uniform sampler2D kernel;
 uniform vec2 res; // kernel dimensions in pixels
 
@@ -203,7 +223,7 @@ void main() {
 
   // The noisier the environment, the more local variation in the texture of the pattern
   // sound.y is dB sound intensity for frequencies above 10KHz, scaled to [0,1]
-  float error = ( rand( p ) + 1. ) * 3.; // random error term in [0,6]
+  float error = ( rand( p ) + 1. ) * 2.; // random error term in [0,4]
   dr += sound.y * error;
 
   // Alternate: The noisier, the more local variation in the speed. Can lead to rapid extinction
@@ -218,24 +238,9 @@ void main() {
   dr = p.x * ( drceil - drfloor ) + drfloor;
   dt = p.y * ( dtceil - dtfloor ) + dtfloor; //*/
 
-  // Gray-Scott state space parameters. Cf.
-  // - http://mrob.com/pub/comp/xmorphia/
-  // - http://mrob.com/pub/comp/xmorphia/pde-uc-classes.html
-  // .062:.061 U-skate world
-  // .098:.056 ??
-  // .078:.061 Worms
-  // .030:.062 Solitons
-  // .025:.060 Pulsing solitons
-  // .029:.057 Mazes
-  // .039:.058 Holes
-  // .026:.051 Chaos
-  // .034:.056 Chaos + holes
-  // .014:.054 Moving spots
-  // .018:.051 Spots and loops
-  // .014:.045 Waves
-
-  float feed = .062;
-  float kill = .061;
+  // Gray-Scott state space parameters
+  float feed = SOLITONS.x;
+  float kill = SOLITONS.y;
 
   vec4 lpUV = torlp9( p, kernel, 1. ); // Laplacian
   vec2 lp = lpUV.xy;
