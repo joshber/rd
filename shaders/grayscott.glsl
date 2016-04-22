@@ -203,7 +203,7 @@ void main() {
 
   // The noisier the environment, the more local variation in the texture of the pattern
   // sound.y is dB sound intensity for frequencies above 10KHz, scaled to [0,1]
-  float error = ( rand( p ) + 1. ) / 2.; // random error term in [0,1]
+  float error = ( rand( p ) + 1. ) * 3.; // random error term in [0,6]
   dr += sound.y * error;
 
   // Alternate: The noisier, the more local variation in the speed. Can lead to rapid extinction

@@ -4,16 +4,15 @@
 // 2016 CC BY-NC-ND 4.0
 
 // TODO
-// - *** Adjust sensitivity of beat detection
-// - *** NEED A BETTER WAY TO DO LOG SPECTROGRAM
-// - FFT windowing
-// - Pass framerate to kernel to compensate, i.e., adjust dt to maintain constant speed in the R-D process?
-// - Centroid in spectrogram
-// - How can we make spectrogram frames independent of frame rate?
+// - !!! Signaling among instances -- PDEs for nonparametric zeitgeber?
 
 // TODO LATER
-// - Signaling among instances -- PDEs for nonparametric zeitgeber?
+// - Tune sensitivity of beat detection
+// - Tune FFT windowing
 // - Break out spectrogram as an AudioListener
+// - Spectrogram frames independent of frame rate?
+// - Better log-freq spectrogram
+// - Pass framerate to kernel to compensate, i.e., adjust dt to maintain constant speed in the R-D process?
 // - Implement Yang's algorithm -- two textures for the two sides of the kernel,
 //   or use wz if it's possible to get it back to Processing safely
 // - Unsupervised learning
@@ -24,6 +23,8 @@ import ddf.minim.*;
 import ddf.minim.analysis.*;
 
 import processing.video.*;
+
+//import org.zeromq.ZMQ; // Inter-instance signaling
 
 //
 // Rendering globals
@@ -45,14 +46,13 @@ Minim minim;
 AudioInput in;
 FFT fft;
 final float log10 = log( 10. ); // For converting amplitudes to dB
-//float fftBw; // FFT spectral bin bandwidth
 BeatDetect beat;
 
 // Spectrogram!
 ArrayDeque<int[]> sg;
 final int sgSize = 60;
-final int sgFbins = 240; // Will be a little less for log spectrogram -- see displaySg()
-color[] sgColor;
+final int sgFbins = 256;
+color[] sgColor; // Stop colors for spectrogram
 final float sgAlpha = .75;
 boolean sgLog = false; // Logarithmic frequency axis?
 
@@ -66,6 +66,7 @@ float beatIntensity, beatRadius;
 PFont olFont;
 float olFsize = 12.;
 
+// What appears in the viewport?
 boolean showVideo = false;
 boolean justVideo = false;
 boolean showSg = false;
@@ -74,6 +75,32 @@ boolean showFr = false;
 // Does ambient sound influence the R-D process?
 boolean actuateSpectral = false;
 boolean actuateBeats = false;
+
+//
+// Inter-instance signaling globals
+
+/*ZMQ.Context zContext;
+ZMQ.Socket zPub;
+ZMQ.Socket zSub;
+final String proxyIP = "188.226.233.222";
+    // Digital Ocean droplet Llama (Amsterdam)
+    // https://cloud.digitalocean.com/droplets/1559653
+
+// TCP ports to connect PUB and SUB sockets to the proxy
+final String toXSUB = "7506";
+final String fromXPUB = "7507";
+
+//
+// Set up our network topology!
+// Each instance gets a PUB and a SUB that connect to a proxy
+// On the proxy, corresponding XSUB and XPUB sockets bind to *:7506 and *:7507 respectively
+
+zContext = ZMQ.context( 1 );
+zPub = zContext.socket( ZMQ.PUB );
+zSub = zContext.socket( ZMQ.SUB );
+zPub.connect( "tcp://" + proxyIP + ":" + toXSUB );
+zSub.connect( "tcp://" + proxyIP + ":" + fromXPUB );
+*/
 
 
 void setup() {
@@ -161,7 +188,6 @@ void setupAudio() {
   // TODO: Experiment with windows
   fft = new FFT( in.bufferSize(), in.sampleRate() );
   fft.window( FFT.HAMMING );
-  //fftBw = in.sampleRate() / in.bufferSize();
 
   beat = new BeatDetect();
   beatP = new PVector( 0., 0. );
@@ -173,7 +199,6 @@ void setupAudio() {
 
   sg = new ArrayDeque<int[]>( sgSize + 1 ); // +1: For when we've added a new frame but not yet removed the oldest
 
-  //
   // To get a good-looking spectrogram, you need to use stop colors
   // TODO More dynamic range in the low end?
 
@@ -203,7 +228,6 @@ void analyzeAudio() {
     float amp0 = fft.getAvg( 0 );
     float amp1 = fft.getAvg( 1 );
 
-    //
     // Convert to Bels, then rescale to [0,1] ( · 10/120 or simply /12)
     // TODO: /1e-10 instead of 1e-12 bc it looks like Minim is returning amplitudes in e-2 units
     // -- scaling down two orders of magnitude yields more plausible dB values
@@ -238,26 +262,26 @@ void analyzeAudio() {
   }
 }
 
-// displaySg()
-// TODO Uncouple display width from spectrogram buffer size
-// Atm, each entry in the queue represents data from a single draw() frame,
-// and we simply draw the spectrogram that many pixels wide
 void displaySg() {
-  final int stretch = 5;
+  final int stretch = 2; // How wide will the spectrogram appear? (NOT how much time it represents)
 
   resetShader();
   pushStyle();
 
   if ( sgLog )
-    fft.logAverages( 11, sgFbins / 12 ); // Assumes Fs == 44.1KHz, so 12 octaves to Nyquist frequency
+    fft.logAverages( 1, 18 ); // 18 bins per octave, minimum bin bandwidth 1Hz(*)
+    // (*) If Fs == 44.1KHz so Nyquist == 22KHz, we get 14 octaves, 256 bins
   else
     fft.linAverages( sgFbins );
 
   fft.forward( in.mix ); // compute newest spectrum
 
-  // Add the newest spectrum to the spectrogram
+  //
+  // Add the newest spectrum frame to the spectrogram
+
   int[] frame = new int[ sgFbins ];
   int n = min( sgFbins, fft.avgSize() ); // We reuse this below
+
   for ( int i = 0 ; i < sgFbins ; ++i ) {
     if ( i < n ) {
       // TODO: /1e-10 instead of 1e-12 bc it looks like Minim is returning amplitudes in e-2 units
@@ -276,6 +300,9 @@ void displaySg() {
   // If the queue has reached its maximum size, remove the oldest frame of frequency data
   if ( sg.size() > sgSize )
     sg.remove();
+
+  //
+  // Draw the spectrogram
 
   int i = 0;
   for ( int[] f : sg ) {
