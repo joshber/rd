@@ -20,13 +20,12 @@
 // - Unsupervised learning
 
 import java.util.*; // ArrayDeque
+import java.io.*; // Runtime and Process, to call ZMQ client
 
 import ddf.minim.*;
 import ddf.minim.analysis.*;
 
 import processing.video.*;
-
-//import org.zeromq.ZMQ; // Inter-instance signaling
 
 //
 // Rendering globals
@@ -77,32 +76,6 @@ boolean showFr = false;
 // Does ambient sound influence the R-D process?
 boolean actuateSpectral = false;
 boolean actuateBeats = false;
-
-//
-// Inter-instance signaling globals
-
-/*ZMQ.Context zContext;
-ZMQ.Socket zPub;
-ZMQ.Socket zSub;
-final String proxyIP = "188.226.233.222";
-    // Digital Ocean droplet Llama (Amsterdam)
-    // https://cloud.digitalocean.com/droplets/1559653
-
-// TCP ports to connect PUB and SUB sockets to the proxy
-final String toXSUB = "7506";
-final String fromXPUB = "7507";
-
-//
-// Set up our network topology!
-// Each instance gets a PUB and a SUB that connect to a proxy
-// On the proxy, corresponding XSUB and XPUB sockets bind to *:7506 and *:7507 respectively
-
-zContext = ZMQ.context( 1 );
-zPub = zContext.socket( ZMQ.PUB );
-zSub = zContext.socket( ZMQ.SUB );
-zPub.connect( "tcp://" + proxyIP + ":" + toXSUB );
-zSub.connect( "tcp://" + proxyIP + ":" + fromXPUB );
-*/
 
 
 void setup() {
@@ -327,6 +300,26 @@ void displaySg() {
   }
 
   popStyle();
+}
+
+//
+// Inter-instance messaging
+
+// Publish new signals and receive any incoming with a single call
+void pubsub( String signal ) { //FIXME
+  String command = dataPath( "../zmq" ) + ""; // FIXME
+  try {
+    Runtime rt = Runtime.getRuntime();
+    Process p = rt.exec( command );
+
+    BufferedReader response = new BufferedReader( new InputStreamReader( p.getInputStream() ) );
+
+    // FIXME Parse the response
+  }
+  catch ( Exception e ) {
+    println( e.toString() );
+    e.printStackTrace();
+  }
 }
 
 //
