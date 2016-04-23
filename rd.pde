@@ -29,8 +29,6 @@ import ddf.minim.analysis.*;
 
 import processing.video.*;
 
-//import org.zeromq.ZMQ;
-
 //
 // Rendering globals
 
@@ -69,8 +67,6 @@ float beatIntensity, beatRadius;
 // Inter-instance signaling
 
 Runtime runtime;
-//ZMQ.Context pubsubContext;
-//ZMQ.Socket pubSoc, subSoc;
 
 //
 // UI globals
@@ -116,8 +112,7 @@ void setup() {
   textAlign( RIGHT, TOP );
 
   setupAudio();
-  runtime = Runtime.getRuntime();
-  //setupSignaling();
+  runtime = Runtime.getRuntime(); // For inter-instance signaling
 
   // Start the video
   video = new Movie( this, "video/JLT 12 04 2016.mov" );
@@ -331,31 +326,6 @@ void updateSignals( String s ) {
     e.printStackTrace();
   }
 }
-
-/*void setupSignaling() {
-  // IP is for Digital Ocean droplet Llama, Amsterdam
-  // https://cloud.digitalocean.com/droplets/1559653
-  final String proto = "tcp://188.226.233.222:";
-
-  pubsubContext = new ZMQ.Context( 1 );
-  pubSoc = pubsubContext.socket( ZMQ.PUB );
-  subSoc = pubsubContext.socket( ZMQ.SUB );
-
-  // Instances send signals to port 7506, receive on 7507
-  pubSoc.connect( proto + "7506" );
-  subSoc.connect( proto + "7507" );
-}
-
-void getSignals() {
-  // Nonblocking recv()
-  // Question of how to make sure we're receiving signals in a timely fashion,
-  // i.e., if there are a lot, how can we make sure we neither drop many,
-  // nor receive them in such a delayed fashion as to nullify the exercise
-}
-
-void sendSignals() {
-  // Send a signal to the proxy
-}*/
 
 //
 // Additional UI overlays
