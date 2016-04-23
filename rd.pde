@@ -8,7 +8,7 @@
 //   - 1 poll/sec ... sending beats, or lo/hi spectrum?
 //   - ZMQ in-sketch, or simply call an outside Python script (difficulty building jzmq ...)
 // - Investigate additional G-S feed/kill ratios
-// - Tune dr noise term in grayscott.glsl -- maybe [0,3] instead of [0,6]
+// - Tune dr noise term in grayscott.glsl -- maybe [0,3]?
 // - Tune beat detection
 
 // TODO LATER

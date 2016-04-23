@@ -13,18 +13,35 @@
 # https://stackoverflow.com/questions/21768823/zeromq-mutliple-publishers-and-subscribers-using-xpub-xsub-is-this-a-correct-i
 # N.b. re XSUB connecting rather than binding: https://github.com/zeromq/libzmq/issues/897
 
+import sys
 import zmq
 
 def main():
     context = zmq.Context()
-    # sys.argv[1] should contain the argument
-    # key question is: How to make sure signaling does not turn into an IIR --
-    # i.e., instance 0 could broadcast, and other instances could broadcast their response impulses ...
-    # maybe an instance only broadcasts impulses generated directly by sound?
 
-# FIXME FOR CLIENT subscriber.setsockopt(zmq.SUBSCRIBE, b"A") on subscriber side ... just preface everything with RD
-# sub.recv( flags = zmq.NOBLOCK ) https://pyzmq.readthedocs.org/en/latest/api/zmq.html
+    pub = context.socket( zmq.PUB )
+    pub.connect( "tcp://188.226.233.222:7506" )
 
-# Read signal from command line
+    sub = context.socket( zmq.SUB )
+    sub.connect( "tcp://188.226.233.222:7507" )
+    sub.setsockopt( zmq.SUBSCRIBE, "" ) # Receive ALL messages published on this port
 
-# send in byte format, pub.send( b"..." )
+    msg = sys.argv[ 1 ]
+
+    try:
+        pub.send_string( msg, flags = zmq.NOBLOCK )
+        received = sub.recv_string( flags = zmq.NOBLOCK )
+    except zmq.ZMQError as e:
+        if e.errno == zmq.ETERM:
+            return
+
+    # Caller will scrape stdout
+    if received:
+        print received
+
+    pub.close()
+    sub.close()
+    context.destroy()
+
+if __name__ == '__main__' :
+    main()
