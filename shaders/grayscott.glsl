@@ -33,7 +33,7 @@ CHAOSHOLES  = vec2( .034, .056 ), // Chaos + holes
 MOVINGSPOTS = vec2( .014, .054 ), // Moving spots
 SPOTSLOOPS  = vec2( .018, .051 ), // Spots and loops
 WAVES       = vec2( .014, .045 ), // Waves
-MOREWORMS   = vec2( .098, .056 ); // ???
+STEADY      = vec2( .098, .056 ); // V stays steady
 
 uniform sampler2D kernel;
 uniform vec2 res; // kernel dimensions in pixels
@@ -239,8 +239,9 @@ void main() {
   dt = p.y * ( dtceil - dtfloor ) + dtfloor; //*/
 
   // Gray-Scott state space parameters
-  float feed = SOLITONS.x;
-  float kill = SOLITONS.y;
+  vec2 fk = CHAOS;
+  float feed = fk.x;
+  float kill = fk.y;
 
   vec4 lpUV = torlp9( p, kernel, 1. ); // Laplacian
   vec2 lp = lpUV.xy;

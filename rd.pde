@@ -5,6 +5,8 @@
 
 // TODO
 // - !!! Signaling among instances -- PDEs for nonparametric zeitgeber?
+//   - 1 poll/sec ... sending beats, or lo/hi spectrum?
+//   - ZMQ in-sketch, or simply call an outside Python script (difficulty building jzmq ...)
 // - Investigate additional G-S feed/kill ratios
 // - Tune dr noise term in grayscott.glsl -- maybe [0,3] instead of [0,6]
 // - Tune beat detection
@@ -20,12 +22,14 @@
 // - Unsupervised learning
 
 import java.util.*; // ArrayDeque
-import java.io.*; // Runtime and Process, to call ZMQ client
+import java.io.*; // Runtime, Process
 
 import ddf.minim.*;
 import ddf.minim.analysis.*;
 
 import processing.video.*;
+
+//import org.zeromq.ZMQ;
 
 //
 // Rendering globals
@@ -60,6 +64,13 @@ boolean sgLog = false; // Logarithmic frequency axis?
 // For actuating beats in the kernel
 PVector beatP;
 float beatIntensity, beatRadius;
+
+//
+// Inter-instance signaling
+
+Runtime runtime;
+//ZMQ.Context pubsubContext;
+//ZMQ.Socket pubSoc, subSoc;
 
 //
 // UI globals
@@ -105,6 +116,8 @@ void setup() {
   textAlign( RIGHT, TOP );
 
   setupAudio();
+  runtime = Runtime.getRuntime();
+  //setupSignaling();
 
   // Start the video
   video = new Movie( this, "video/JLT 12 04 2016.mov" );
@@ -237,6 +250,7 @@ void analyzeAudio() {
   }
 }
 
+// displaySg: Display a spectrogram!
 void displaySg() {
   final int stretch = 2; // How wide will the spectrogram appear? (NOT how much time it represents)
 
@@ -244,8 +258,8 @@ void displaySg() {
   pushStyle();
 
   if ( sgLog )
-    fft.logAverages( 1, 18 ); // 18 bins per octave, minimum bin bandwidth 1Hz(*)
-    // (*) If Fs == 44.1KHz so Nyquist == 22KHz, we get 14 octaves, 256 bins
+    fft.logAverages( 40, 25 ); // 25 bins per octave, minimum bin bandwidth 40Hz(*)
+    // (*) If Fs == 44.1KHz so Nyquist == 22KHz, we get 10 octaves, 250 bins
   else
     fft.linAverages( sgFbins );
 
@@ -305,22 +319,43 @@ void displaySg() {
 //
 // Inter-instance messaging
 
-// Publish new signals and receive any incoming with a single call
-void pubsub( String signal ) { //FIXME
-  String command = dataPath( "../zmq" ) + ""; // FIXME
+void updateSignals( String s ) {
+  final String command = dataPath( "/../zmq/pubsub" ) + ""; // FIXME
   try {
-    Runtime rt = Runtime.getRuntime();
-    Process p = rt.exec( command );
-
-    BufferedReader response = new BufferedReader( new InputStreamReader( p.getInputStream() ) );
-
-    // FIXME Parse the response
+    Process p = runtime.exec( command );
+    BufferedReader received = new BufferedReader( new InputStreamReader( p.getInputStream() ) );
+    // FIXME Parse received signals
   }
   catch ( Exception e ) {
     println( e.toString() );
     e.printStackTrace();
   }
 }
+
+/*void setupSignaling() {
+  // IP is for Digital Ocean droplet Llama, Amsterdam
+  // https://cloud.digitalocean.com/droplets/1559653
+  final String proto = "tcp://188.226.233.222:";
+
+  pubsubContext = new ZMQ.Context( 1 );
+  pubSoc = pubsubContext.socket( ZMQ.PUB );
+  subSoc = pubsubContext.socket( ZMQ.SUB );
+
+  // Instances send signals to port 7506, receive on 7507
+  pubSoc.connect( proto + "7506" );
+  subSoc.connect( proto + "7507" );
+}
+
+void getSignals() {
+  // Nonblocking recv()
+  // Question of how to make sure we're receiving signals in a timely fashion,
+  // i.e., if there are a lot, how can we make sure we neither drop many,
+  // nor receive them in such a delayed fashion as to nullify the exercise
+}
+
+void sendSignals() {
+  // Send a signal to the proxy
+}*/
 
 //
 // Additional UI overlays
