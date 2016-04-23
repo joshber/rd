@@ -314,10 +314,10 @@ void displaySg() {
 //
 // Inter-instance messaging
 
-void updateSignals( String s ) {
-  final String command = dataPath( "/../zmq/pubsub" ) + ""; // FIXME
+void pubsub( String s ) {
+  final String command = "python " + dataPath( "/../zmq" ) + "pubsub.py \"";
   try {
-    Process p = runtime.exec( command );
+    Process p = runtime.exec( command + s + "\"" );
     BufferedReader received = new BufferedReader( new InputStreamReader( p.getInputStream() ) );
     // FIXME Parse received signals
   }
