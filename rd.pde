@@ -4,25 +4,13 @@
 // 2016 CC BY-NC-ND 4.0
 
 // TODO
-// - !!! Signaling among instances -- PDEs for nonparametric zeitgeber?
-//   - 1 poll/sec ... sending beats, or lo/hi spectrum?
-//   - ZMQ in-sketch, or simply call an outside Python script (difficulty building jzmq ...)
-// - Investigate additional G-S feed/kill ratios
+// - Tune kernel scale and video convolution
 // - Tune dr noise term in grayscott.glsl -- maybe [0,3]?
-// - Tune beat detection
-
-// TODO LATER
-// - Tune FFT windowing
-// - Break out spectrogram as an AudioListener
-// - Spectrogram frames independent of frame rate?
-// - Better log-freq spectrogram
+// - Tune beat detection -- maybe use frequency mode?
+// - *** Break out spectrogram and analyzeAudio as AudioListeners
 // - Pass framerate to kernel to compensate, i.e., adjust dt to maintain constant speed in the R-D process?
-// - Implement Yang's algorithm -- two textures for the two sides of the kernel,
-//   or use wz if it's possible to get it back to Processing safely
-// - Unsupervised learning
 
 import java.util.*; // ArrayDeque
-import java.io.*; // Runtime, Process
 
 import ddf.minim.*;
 import ddf.minim.analysis.*;
@@ -64,11 +52,6 @@ PVector beatP;
 float beatIntensity, beatRadius;
 
 //
-// Inter-instance signaling
-
-Runtime runtime;
-
-//
 // UI globals
 
 PFont olFont;
@@ -83,6 +66,7 @@ boolean showFr = false;
 // Does ambient sound influence the R-D process?
 boolean actuateSpectral = false;
 boolean actuateBeats = false;
+boolean entrainToNeighbors = false;
 
 
 void setup() {
@@ -112,11 +96,10 @@ void setup() {
   textAlign( RIGHT, TOP );
 
   setupAudio();
-  runtime = Runtime.getRuntime(); // For inter-instance signaling
 
   // Start the video
   video = new Movie( this, "video/JLT 12 04 2016.mov" );
-  // FIXME Disable audio? video.volume( 0 ) does not work
+  video.volume( 0 ); // FIXME Does this work?
   video.loop();
 }
 
@@ -173,6 +156,7 @@ void setupAudio() {
   fft.window( FFT.HAMMING );
 
   beat = new BeatDetect();
+  beat.setSensitivity( 100 ); // 100ms refractory period between onsets
   beatP = new PVector( 0., 0. );
   beatIntensity = 0.;
   beatRadius = 0.;
@@ -205,7 +189,7 @@ void setupAudio() {
 // In the interest of encapsulating audio-related stuff, this fn sets uniforms in the kernel shader
 void analyzeAudio() {
   if ( actuateSpectral ) {
-    // Just two bands, low and high, split around 10KHz (assuming sample freq of 44.1KHz)
+    // Just two bands, low and high, split around 11KHz (assuming sample freq of 44.1KHz)
     fft.linAverages( 2 );
     fft.forward( in.mix );
     float amp0 = fft.getAvg( 0 );
@@ -313,19 +297,7 @@ void displaySg() {
 
 //
 // Inter-instance messaging
-
-void pubsub( String s ) {
-  final String command = "python " + dataPath( "/../zmq" ) + "pubsub.py \"";
-  try {
-    Process p = runtime.exec( command + s + "\"" );
-    BufferedReader received = new BufferedReader( new InputStreamReader( p.getInputStream() ) );
-    // FIXME Parse received signals
-  }
-  catch ( Exception e ) {
-    println( e.toString() );
-    e.printStackTrace();
-  }
-}
+// TODO!
 
 //
 // Additional UI overlays
@@ -413,6 +385,9 @@ void keyPressed() {
   }
   else if ( key == 'B' ) {
     actuateBeats = ! actuateBeats;
+  }
+  else if ( key == 'E' ) {
+    entrainToNeighbors = ! entrainToNeighbors;
   }
   else if ( '1' <= key && key <= '9' ) {
     frameRate( int( key ) - int( '0' ) );

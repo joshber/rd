@@ -39,7 +39,7 @@ uniform sampler2D kernel;
 uniform vec2 res; // kernel dimensions in pixels
 
 // Audio signal features
-uniform vec3 sound; // (dB 0–10KHz, 10–20KHz, running time in ms)
+uniform vec3 sound; // (dB 0–11KHz, 11–22KHz, running time in ms)
   // N.b., dB scaled to [0,1], i.e., 60dB is .5, 120dB 1.0
 
 // Paintbrushes. Simplifies things on the controller side to keep these separate
@@ -239,7 +239,7 @@ void main() {
   dt = p.y * ( dtceil - dtfloor ) + dtfloor; //*/
 
   // Gray-Scott state space parameters
-  vec2 fk = CHAOS;
+  vec2 fk = WAVES;
   float feed = fk.x;
   float kill = fk.y;
 

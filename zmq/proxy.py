@@ -22,6 +22,7 @@ def main():
     while True:
         msg = ""
         try:
+            # FIXME: NOBLOCK?
             # Receive messages from remote clients (RD instances) and republish them
             msg = xsub.recv_string()
             if msg != "":
