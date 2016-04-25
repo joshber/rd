@@ -9,7 +9,7 @@
 // https://github.com/pmneila/jsexp / https://pmneila.github.io/jsexp/grayscott/
 
 #ifdef GL_ES
-precision highp float;
+precision highp float; // necessary for snoise()
 precision mediump int;
 #endif
 
@@ -60,98 +60,10 @@ float rand( vec2 uv ) {
 
 //
 // Laplacians
-
-// Toroidal versions TODO
-// - More efficient to incorporate the branches into the initial assignments?
-
-vec4 lp5( vec2 uv, sampler2D k, float scale ) {
-  vec3 p = vec3( scale / res, 0. );
-
-  // Five-point stencil. Imagine a 3x3 grid labeled a-i. We're just taking the y±1 and x±1 points
-  vec2 b = uv - p.zy;
-  vec2 d = uv - p.xz;
-  vec2 f = uv + p.xz;
-  vec2 h = uv + p.zy;
-
-  vec4 UV = texture2D( k, uv );
-
-  vec4 lp = ( 1. / ( scale * scale ) ) * (
-      texture2D( k, b )
-    + texture2D( k, d )
-    + texture2D( k, f )
-    + texture2D( k, h )
-    - UV * 4. );
-
-  // By returning UV here, we obviate the need to resample the current fragment
-  return vec4( lp.xy, UV.xy );
-}
-
-// Toroidal geometry
-// Thanks: http://mrob.com/pub/comp/screensavers/ (see function gray_scott 40 percent of the way down)
-vec4 torlp5( vec2 uv, sampler2D k, float scale ) {
-  vec3 p = vec3( scale / res, 0. );
-
-  // Five-point stencil. Imagine a 3x3 grid labeled a-i. We're just taking the y±1 and x±1 points
-  vec2 b = uv - p.zy;
-  vec2 d = uv - p.xz;
-  vec2 f = uv + p.xz;
-  vec2 h = uv + p.zy;
-
-  // Wrap at the edges
-  b.y += b.y < 0. ? 1. : 0.;
-  d.x += d.x < 0. ? 1. : 0.;
-  f.x -= f.x > 1. ? 1. : 0.;
-  h.y -= h.y > 1. ? 1. : 0.;
-
-  vec4 UV = texture2D( k, uv );
-
-  vec4 lp = ( 1. / ( scale * scale ) ) * (
-      texture2D( k, b )
-    + texture2D( k, d )
-    + texture2D( k, f )
-    + texture2D( k, h )
-    - UV * 4. );
-
-  // By returning UV here, we obviate the need to resample the current fragment
-  return vec4( lp.xy, UV.xy );
-}
-
-//
+// NB Five-point versions removed for loading efficiency
 // Nine-point stencils for the Laplacian abound
 // This one comes from http://www.nada.kth.se/~tony/abstracts/Lin90-PAMI.html
 // via https://en.wikipedia.org/wiki/Discrete_Laplace_operator
-// It agrees with the five-point
-
-vec4 lp9( vec2 uv, sampler2D k, float scale ) {
-  vec3 p = vec3( scale / res, 0. );
-  vec3 q = vec3( p.x, -p.y, 0. );
-
-  // Nine-point stencil: 3x3 grid labeled a-i
-  vec2 a = uv - p.xy;
-  vec2 b = uv - p.zy;
-  vec2 c = uv + q.xy;
-  vec2 d = uv - p.xz;
-  vec2 f = uv + p.xz;
-  vec2 g = uv - q.xy;
-  vec2 h = uv + p.zy;
-  vec2 i = uv + p.xy;
-
-  vec4 UV = texture2D( k, uv );
-
-  vec4 lp = ( 1. / 6. * ( scale * scale ) ) * (
-      texture2D( k, a )
-    + texture2D( k, b ) * 4.
-    + texture2D( k, c )
-    + texture2D( k, d ) * 4.
-    + texture2D( k, f ) * 4.
-    + texture2D( k, g )
-    + texture2D( k, h ) * 4.
-    + texture2D( k, i )
-    - UV * 20. );
-
-  // By returning UV here, we obviate the need to resample the current fragment
-  return vec4( lp.xy, UV.xy );
-}
 
 // Toroidal geometry
 vec4 torlp9( vec2 uv, sampler2D k, float scale ) {
@@ -216,13 +128,13 @@ void main() {
   float dt = 2.5; // time step. Keep in [1,4). Above ~4 you get uncontrolled V growth, exposing the whole video
 
   // The louder the environment, the faster the simulation runs
-  // sound.x is dB sound intensity for frequencies up to 10KHz, scaled to [0,1]
+  // sound.x is dB sound intensity for frequencies up to 11KHz, scaled to [0,1]
   float dtfloor = 1.;
   float dtceil = 4.;
   dt = sound.x * ( dtceil - dtfloor ) + dtfloor;
 
   // The noisier the environment, the more local variation in the texture of the pattern
-  // sound.y is dB sound intensity for frequencies above 10KHz, scaled to [0,1]
+  // sound.y is dB sound intensity for frequencies above 11KHz, scaled to [0,1]
   float error = ( rand( p ) + 1. ) * 2.; // random error term in [0,4]
   dr += sound.y * error;
 
@@ -239,7 +151,7 @@ void main() {
   dt = p.y * ( dtceil - dtfloor ) + dtfloor; //*/
 
   // Gray-Scott state space parameters
-  vec2 fk = WAVES;
+  vec2 fk = USKATE;
   float feed = fk.x;
   float kill = fk.y;
 

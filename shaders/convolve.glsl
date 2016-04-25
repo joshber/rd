@@ -51,7 +51,7 @@ void main() {
 
   // Modify c components with k
   //c.x = 1. - fract( c.x + k.x ); // Hue
-  c.z = 1. - clamp( c.z * k.y, 0., 1. ); // Brightness
+  c.z = clamp( c.z * k.y, 0., 1. ); // Brightness
 
   gl_FragColor = vec4( hsb_rgb( c ), 1. );
 }
