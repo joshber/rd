@@ -5,9 +5,12 @@
 
 // TODO
 // - Tune kernel scale and video convolution
+// - Experiment with ways of representing beats -- vertical sinusoids?
 // - Tune dr noise term in grayscott.glsl -- maybe [0,3]?
+// - Do more with high octave sound in kernel -- glitch and warpage?
 // - Tune beat detection -- maybe use frequency mode?
-// - Pass framerate to kernel to compensate, i.e., adjust dt to maintain constant speed in the R-D process?
+// - Pass framerate to kernel to compensate for fr variation,
+//   i.e., adjust dt to maintain constant speed in the R-D process?
 
 import ddf.minim.*;
 import ddf.minim.analysis.*;
@@ -79,7 +82,7 @@ void setup() {
   loadKernelShader();
   loadDisplayShaders( true ); // true == load both
 
-  // Load font for overlay
+  // Load UI font
   uiFont = createFont( "fonts/InputSansCondensed-Black.ttf", uiFsize, true ); // true == antialiasing
   textFont( uiFont );
   textSize( uiFsize );
@@ -89,7 +92,7 @@ void setup() {
 
   // Start the video
   video = new Movie( this, "video/JLT 12 04 2016.mov" );
-  video.volume( 0 ); // FIXME Does this work?
+  video.volume( 0 ); // FIXME Does this work? Not on OSX …
   video.loop();
 }
 
