@@ -5,6 +5,7 @@ import ddf.minim.analysis.*;
 
 // TODO
 // - Experiment with color map -- maybe do more with saturation?
+//   Maybe rotate from blue to yellow through green while raising brightness from .5 to 1?
 
 class Spectrogram {
   final float log10 = log( 10. ); // For converting intensities to dB
@@ -13,7 +14,7 @@ class Spectrogram {
   FFT fft;
   final int nfbins = 256;
 
-  ArrayDeque<int[]> sg;
+  ArrayDeque<color[]> sg;
   final int nframes = 60;
 
   color[] colors;
@@ -26,19 +27,8 @@ class Spectrogram {
     fft = new FFT( in.bufferSize(), in.sampleRate() );
     fft.linAverages( nfbins );
 
-    zeroOutSgQueue();
     buildColorMap();
-  }
-
-  void zeroOutSgQueue() {
-    sg = new ArrayDeque<int[]>( nframes );
-    for ( int i = 0 ; i < nframes ; ++i ) {
-      int[] frame = new int[ nfbins ];
-      for ( int j = 0 ; j < nfbins ; ++ j ) {
-        frame[ j ] = 120 * colorResolution; // transparent
-      }
-      sg.add( frame );
-    }
+    zeroOutSgQueue();
   }
 
   // To get a good-looking spectrogram, use stop colors
@@ -58,7 +48,7 @@ class Spectrogram {
 
     // < 10dB: Black
     for ( i = 0 ; i < 10 * colorResolution ; ++i )
-      colors[ i ] = color( 0., alpha );
+      colors[ i ] = color( 0., 0., 0., alpha );
 
     // 10–49dB: Fade up to full brightness, hue set to blue
     for ( ; i < 50 * colorResolution ; ++i )
@@ -104,17 +94,28 @@ class Spectrogram {
       colors[ i ] = color( 0., 0., 1., alpha );
   }
 
+  void zeroOutSgQueue() {
+    sg = new ArrayDeque<color[]>( nframes );
+    for ( int i = 0 ; i < nframes ; ++i ) {
+      color[] frame = new color[ nfbins ];
+      for ( int j = 0 ; j < nfbins ; ++ j ) {
+        frame[ j ] = colors[ 120 * colorResolution ]; // transparent
+      }
+      sg.add( frame );
+    }
+  }
+
   void draw( int margin ) {
-    // Add a new sample frame to the spectrogram
     fft.forward( in.mix );
 
-    int[] frame = new int[ nfbins ];
+    // Add a new sample frame to the spectrogram
+    color[] frame = new color[ nfbins ];
     for ( int i = 0 ; i < nfbins ; ++i ) {
       // TODO: /1e-10 instead of 1e-12 bc it looks like Minim is returning amplitudes in e-2 units
       // -- scaling down two orders of magnitude yields more plausible dB values
-      float amp = fft.getAvg( i );
-      int dB = floor( colorResolution * 10. * log( amp * amp / 1e-10 ) / log10 ); // Convert to decibels(*)
-      frame[ i ] = min( max( 0, dB ), 479 );
+      float a = fft.getAvg( i );
+      int dB = floor( colorResolution * 10. * log( a * a / 1e-10 ) / log10 ); // Convert to decibels(*)
+      frame[ i ] = colors[ min( max( 0, dB ), 120 * colorResolution - 1 ) ];
       // (*) Actually cR·dB -- dB == 10·log10(intensity / 1e-12 W/m2). We use a cR·120-step color range, whence cR·
     }
 
@@ -126,7 +127,7 @@ class Spectrogram {
       float xoff = width - ( nframes * xstretch + margin ) + i * xstretch; // Draw from the left
       for ( int k = 0 ; k < nfbins ; ++k ) {
         float yoff = height - k - margin; // Draw from the bottom
-        fill( colors[ f[ k ] ] );
+        fill( f[ k ] );
         rect( xoff, yoff, xstretch, 1 );
       }
       ++i;

@@ -103,15 +103,13 @@ void draw() {
     loadDisplayShaders( false ); // only reload the display shader currently in use
   }
 
-  //
-  // Update the kernel in an offscreen buffer
-
   analyzeAudio();
 
   kernel.set( "kernel", kbuf );
   kernel.set( "brush", float( mouseX / kscale ), float( ( height - mouseY ) / kscale ), brushIntensity, brushRadius );
     // height - mouseY: Processing's y-axis is inverted wrt GLSL's
 
+  // Update the kernel in an offscreen buffer
   kbuf.beginDraw();
   kbuf.shader( kernel );
   kbuf.rect( 0, 0, kbuf.width, kbuf.height );
