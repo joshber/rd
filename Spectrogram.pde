@@ -6,6 +6,7 @@ import ddf.minim.analysis.*;
 // TODO
 // - Experiment with color map -- maybe do more with saturation?
 //   Maybe rotate from blue to yellow through green while raising brightness from .5 to 1?
+//   Maybe as above but rotating from red to yellow through orange?
 
 class Spectrogram {
   final float log10 = log( 10. ); // For converting intensities to dB

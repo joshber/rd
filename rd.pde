@@ -5,7 +5,6 @@
 
 // TODO
 // - Tune kernel scale and video convolution
-// - Experiment with ways of representing beats -- vertical sinusoids?
 // - Tune dr noise term in grayscott.glsl -- maybe [0,3]?
 // - Do more with high octave sound in kernel -- glitch and warpage?
 // - Tune beat detection -- maybe use frequency mode?
@@ -149,8 +148,6 @@ void setupAudio() {
 
   beat = new BeatDetect();
   beatP = new PVector( 0., 0. );
-  beatIntensity = 0.;
-  beatRadius = 0.;
 
   spectrogram = new Spectrogram( in );
 }

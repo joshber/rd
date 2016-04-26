@@ -33,16 +33,16 @@ CHAOSHOLES  = vec2( .034, .056 ), // Chaos + holes
 MOVINGSPOTS = vec2( .014, .054 ), // Moving spots
 SPOTSLOOPS  = vec2( .018, .051 ), // Spots and loops
 WAVES       = vec2( .014, .045 ), // Waves
-STEADY      = vec2( .098, .056 ); // V stays steady
+VSTEADY     = vec2( .098, .056 ); // V stays steady
 
 uniform sampler2D kernel;
 uniform vec2 res; // kernel dimensions in pixels
 
 // Audio signal features
 uniform vec3 sound; // (dB 0–11KHz, 11–22KHz, running time in ms)
-  // N.b., dB scaled to [0,1], i.e., 60dB is .5, 120dB 1.0
+  // NB, dB scaled to [0,1], i.e., 60dB is .5, 120dB 1.0
 
-// Paintbrushes. Simplifies things on the controller side to keep these separate
+// Paintbrushes
 uniform vec4 brush; // ( x, y, intensity, radius )
 uniform vec4 beat; // ( x, y, intensity, radius )
 
