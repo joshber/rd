@@ -38,8 +38,10 @@ VSTEADY     = vec2( .098, .056 ); // V stays steady
 uniform sampler2D kernel;
 uniform vec2 res; // kernel dimensions in pixels
 
+uniform vec2 time; // (running time in ms, instantaneous framerate in fps)
+
 // Audio signal features
-uniform vec3 sound; // (dB 0–11KHz, 11–22KHz, running time in ms)
+uniform vec2 sound; // (dB 0–11KHz, 11–22KHz)
   // NB, dB scaled to [0,1], i.e., 60dB is .5, 120dB 1.0
 
 // Paintbrushes
@@ -55,7 +57,7 @@ float snoise( vec2 co ){
     return fract( sin( dot( co.xy ,vec2( 12.9898,78.233 ) ) ) * 43758.5453 );
 }
 float rand( vec2 uv ) {
-  return snoise( vec2( uv.x * cos( sound.z ), uv.y * sin( sound.z ) ) );
+  return snoise( vec2( uv.x * cos( time.x ), uv.y * sin( time.x ) ) );
 }
 
 //
@@ -125,13 +127,14 @@ void main() {
   // Speed and scale parameters
   float ds = .082; // diffusion rate scale. This confounded me for a week. Keep < .1. Better yet, leave it at .082
   float dr = 2.; // diffusion rate ratio, U:V. Must be ≥2. >2, you get finer detail but it's more static. Keep in [2,10]
-  float dt = 2.5; // time step. Keep in [1,4). Above ~4 you get uncontrolled V growth, exposing the whole video
+  float dt;// = 2.5; // time step. Keep in [1,4). Above ~4 you get uncontrolled V growth, exposing the whole video
 
   // The louder the environment, the faster the simulation runs
   // sound.x is dB sound intensity for frequencies up to 11KHz, scaled to [0,1]
   float dtfloor = 1.;
   float dtceil = 4.;
   dt = sound.x * ( dtceil - dtfloor ) + dtfloor;
+  dt *= 60. / time.y; // dt is calibrated for 60fps. Correct for divergence in instantaneous framerate
 
   // The noisier the environment, the more local variation in the texture of the pattern
   // sound.y is dB sound intensity for frequencies above 11KHz, scaled to [0,1]

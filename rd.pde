@@ -4,12 +4,17 @@
 // 2016 CC BY-NC-ND 4.0
 
 // TODO
+// - Switch to Processing sound? Might be faster--less call stack,
+//   plus more versatile on FFT size -- FFT of 2 bands for low/high ...
+// - IMPLEMENT YOUR OWN BEAT DETECTOR ... or CENTROID
+// - Forget beats, maybe high-frequency sound causes ripples or glitches?
+//   Say, every random(6,60) frames, a new center, P, is chosen
+//   Then, in the kernel shader, high-frequency sound intensity - 60dB
+//   is used as the coefficient for some kind of subtle glitch centered on P
+//   First try it with Minim, then swap out
 // - Tune kernel scale and video convolution
 // - Tune dr noise term in grayscott.glsl -- maybe [0,3]?
 // - Do more with high octave sound in kernel -- glitch and warpage?
-// - Tune beat detection -- maybe use frequency mode?
-// - Pass framerate to kernel to compensate for fr variation,
-//   i.e., adjust dt to maintain constant speed in the R-D process?
 
 import ddf.minim.*;
 import ddf.minim.analysis.*;
@@ -108,6 +113,7 @@ void draw() {
   analyzeAudio();
 
   kernel.set( "kernel", kbuf );
+  kernel.set( "time", float( millis() ), frameRate );
   kernel.set( "brush", float( mouseX / kscale ), float( ( height - mouseY ) / kscale ), brushIntensity, brushRadius );
     // height - mouseY: Processing's y-axis is inverted wrt GLSL's
 
@@ -154,7 +160,7 @@ void setupAudio() {
 
 void analyzeAudio() {
   if ( ! useSound ) {
-    kernel.set( "sound", .5, 0., 0. ); // .5: 60dB, i.e., “medium” speed
+    kernel.set( "sound", .5, 0. ); // .5: 60dB, i.e., “medium” speed
     kernel.set( "beat", 0., 0., 0., 0. );
     return;
   }
