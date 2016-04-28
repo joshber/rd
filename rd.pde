@@ -4,21 +4,17 @@
 // 2016 CC BY-NC-ND 4.0
 
 // TODO
-// - Switch to Processing sound? Might be faster--less call stack,
-//   plus more versatile on FFT size -- FFT of 2 bands for low/high ...
-// - IMPLEMENT YOUR OWN BEAT DETECTOR ... or CENTROID
-// - Forget beats, maybe high-frequency sound causes ripples or glitches?
+// - Beat Detector class -- encapsulate Beads' beat detection
+// - *** Use SPL to drive dt, centroid to drive dr?
+// - IMPLEMENT YOUR OWN BEAT DETECTOR
+// - GLITCH needs to be stateful across per-fragment shader calls -- set a position and a (small) radius, as with beat
 //   Say, every random(6,60) frames, a new center, P, is chosen
-//   Then, in the kernel shader, high-frequency sound intensity - 60dB
-//   is used as the coefficient for some kind of subtle glitch centered on P
-//   First try it with Minim, then swap out
-// - Tune kernel scale and video convolution
+//   Then, in the kernel shader, flatness is used as the coefficient
+//   for some kind of subtle glitch centered on P
 // - Tune dr noise term in grayscott.glsl -- maybe [0,3]?
-// - Do more with high octave sound in kernel -- glitch and warpage?
+// - Tune video convolution
 
-import ddf.minim.*;
-import ddf.minim.analysis.*;
-
+import processing.sound.*;
 import processing.video.*;
 
 //
@@ -37,12 +33,7 @@ int brushRadius = 1<<3;
 //
 // Audio globals
 
-AudioInput in;
-FFT fft;
-BeatDetect beat;
-final float log10 = log( 10. ); // For converting amplitudes to dB
-
-Spectrogram spectrogram;
+Spectrogram sg;
 
 // For actuating beats in the kernel
 PVector beatP;
@@ -92,7 +83,14 @@ void setup() {
   textSize( uiFsize );
   textAlign( RIGHT, TOP );
 
-  setupAudio();
+  AudioIn in = new AudioIn( this, 0 );
+  in.start();
+  sg = new Spectrogram( this, in );
+  sg.drawCentroid( true );
+  sg.drawSpread( true );
+  sg.getCentroid( true );
+    // Make sure we've decomposed the signal at least once,
+    // since analysis comes before drawing the spectrogram in draw()
 
   // Start the video
   video = new Movie( this, "video/JLT 12 04 2016.mov" );
@@ -105,12 +103,21 @@ void draw() {
   int fc = frameCount % 120;
   if ( fc == 60 ) {
     loadKernelShader();
+    sg.getCentroid( true );
+      // TODO: For reasons unclear, we need to reprime the FFT after reloading the shader,
+      // otherwise it drops a frame and V goes to extinction in the kernel
   }
   else if ( fc == 119 ) {
     loadDisplayShaders( false ); // only reload the display shader currently in use
   }
 
-  analyzeAudio();
+  if ( useSound ) {
+    PVector csf = sg.getCentroidSpreadFlatness( ! showSpectrogram );
+    kernel.set( "sound", sg.getSPL( ! showSpectrogram ), csf.x / sg.NYQUIST, csf.y / sg.NYQUIST, csf.z );
+  }
+  else {
+    kernel.set( "sound", .5, .5, 0., .1 );
+  }
 
   kernel.set( "kernel", kbuf );
   kernel.set( "time", float( millis() ), frameRate );
@@ -137,65 +144,12 @@ void draw() {
   }
 
   resetShader();
-  if ( showSpectrogram ) spectrogram.draw( 10 );
+  if ( showSpectrogram ) sg.draw( 10 );
   if ( showFramerate ) drawFramerate();
 }
 
 //
-// Audio-related
-
-void setupAudio() {
-  Minim m = new Minim( this );
-  in = m.getLineIn();
-
-  fft = new FFT( in.bufferSize(), in.sampleRate() );
-  fft.window( FFT.HAMMING );
-  fft.linAverages( 2 );
-
-  beat = new BeatDetect();
-  beatP = new PVector( 0., 0. );
-
-  spectrogram = new Spectrogram( in );
-}
-
-void analyzeAudio() {
-  if ( ! useSound ) {
-    kernel.set( "sound", .5, 0. ); // .5: 60dB, i.e., “medium” speed
-    kernel.set( "beat", 0., 0., 0., 0. );
-    return;
-  }
-
-  // Just two bands, low and high, split around 11KHz (assuming sample freq of 44.1KHz)
-  fft.forward( in.mix );
-  float a0 = fft.getAvg( 0 );
-  float a1 = fft.getAvg( 1 );
-
-  // Convert to Bels, then rescale to [0,1] ( · 10/120 or simply /12)
-  // TODO: /1e-10 instead of 1e-12 bc it looks like Minim is returning amplitudes in e-2 units
-  // -- scaling down two orders of magnitude yields more plausible dB values
-
-  float b0 = clamp( log( a0 * a0 / 1e-10 ) / log10 / 12., 0., 1. );
-  float b1 = clamp( log( a1 * a1 / 1e-10 ) / log10 / 12., 0., 1. );
-
-  // Beat detection
-  beat.detect( in.mix );
-  if ( beat.isOnset() ) {
-    beatIntensity = 1.;
-    beatP.x = random( kbuf.width );
-    beatP.y = random( kbuf.height );
-    beatRadius = random( width / 20., width / 10. );
-  }
-  else {
-    // Exponentional decay -- TODO Tune decay gamma
-    beatIntensity = beatIntensity < .001 ? 0. : beatIntensity / 2.;
-  }
-
-  kernel.set( "sound", b0, b1, float( millis() ) );
-  kernel.set( "beat", beatP.x, beatP.y, beatIntensity, beatRadius );
-}
-
-//
-// Additional UI overlays
+// UI overlays
 
 void drawFramerate() {
   final float xoff = width - 10;

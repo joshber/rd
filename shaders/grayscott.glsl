@@ -28,8 +28,8 @@ PULSOLITONS = vec2( .025, .060 ), // Pulsing solitons
 WORMS       = vec2( .078, .061 ), // Worms
 MAZES       = vec2( .029, .057 ), // Mazes
 HOLES       = vec2( .039, .058 ), // Holes
-CHAOS       = vec2( .026, .051 ), // Chaos
-CHAOSHOLES  = vec2( .034, .056 ), // Chaos + holes
+TREERINGS   = vec2( .026, .051 ), // Tree rings
+TREERINGSHOLES = vec2( .034, .056 ), // Tree rings + holes
 MOVINGSPOTS = vec2( .014, .054 ), // Moving spots
 SPOTSLOOPS  = vec2( .018, .051 ), // Spots and loops
 WAVES       = vec2( .014, .045 ), // Waves
@@ -41,12 +41,12 @@ uniform vec2 res; // kernel dimensions in pixels
 uniform vec2 time; // (running time in ms, instantaneous framerate in fps)
 
 // Audio signal features
-uniform vec2 sound; // (dB 0–11KHz, 11–22KHz)
-  // NB, dB scaled to [0,1], i.e., 60dB is .5, 120dB 1.0
+uniform vec4 sound; // (SPL [0,1], centroid [0,1], spread [0,1], flatness [0,1])
+  // NB, SPL dB scaled to [0,1], i.e., 60dB is .5, 120dB 1.0
 
 // Paintbrushes
 uniform vec4 brush; // ( x, y, intensity, radius )
-uniform vec4 beat; // ( x, y, intensity, radius )
+//uniform vec4 beat; // ( x, y, intensity, radius )
 
 //
 // Noise
@@ -127,34 +127,34 @@ void main() {
   // Speed and scale parameters
   float ds = .082; // diffusion rate scale. This confounded me for a week. Keep < .1. Better yet, leave it at .082
   float dr = 2.; // diffusion rate ratio, U:V. Must be ≥2. >2, you get finer detail but it's more static. Keep in [2,10]
-  float dt;// = 2.5; // time step. Keep in [1,4). Above ~4 you get uncontrolled V growth, exposing the whole video
+  float dt = 2.5; // time step. Keep in [1,4). Above ~4 you get uncontrolled V growth, exposing the whole video
 
-  // The louder the environment, the faster the simulation runs
+  // The louder and brighter the environment, the faster the simulation runs
   // sound.x is dB sound intensity for frequencies up to 11KHz, scaled to [0,1]
   float dtfloor = 1.;
   float dtceil = 4.;
-  dt = sound.x * ( dtceil - dtfloor ) + dtfloor;
+  dt = .5 * ( sound.x + sound.y ) * ( dtceil - dtfloor ) + dtfloor;
   dt *= 60. / time.y; // dt is calibrated for 60fps. Correct for divergence in instantaneous framerate
 
-  // The noisier the environment, the more local variation in the texture of the pattern
-  // sound.y is dB sound intensity for frequencies above 11KHz, scaled to [0,1]
+  // The broader the spectrum (spectral spread), the more local variation in the texture of the pattern
   float error = ( rand( p ) + 1. ) * 2.; // random error term in [0,4]
-  dr += sound.y * error;
+  dr += sound.z * error;
 
-  // Alternate: The noisier, the more local variation in the speed. Can lead to rapid extinction
+  // Alternate: The greater the spectral spread, the more local variation in the speed
+  // Can lead to rapid extinction
   //float error = rand( p );
-  //dt += sound.y * error;
+  //dt += sound.z * error;
 
-  /*/ dr and dt gradients -- systematically profile effects of different values
-  float drfloor = 2.;
-  float drceil = 10.;
-  float dtfloor = 1.;
-  float dtceil = 4.;
-  dr = p.x * ( drceil - drfloor ) + drfloor;
-  dt = p.y * ( dtceil - dtfloor ) + dtfloor; //*/
+  // dr and dt gradients -- systematically profile effects of different values
+  //float drfloor = 2.;
+  //float drceil = 10.;
+  //float dtfloor = 1.;
+  //float dtceil = 4.;
+  //dr = p.x * ( drceil - drfloor ) + drfloor;
+  //dt = p.y * ( dtceil - dtfloor ) + dtfloor;
 
   // Gray-Scott state space parameters
-  vec2 fk = USKATE;
+  vec2 fk = TREERINGSHOLES;
   float feed = fk.x;
   float kill = fk.y;
 
@@ -186,10 +186,13 @@ void main() {
   float br = brush.w / res.x;
   UV.y = min( 1., UV.y + brush.z * ( bd < br  ? .5 * exp( -bd * bd / ( 2. * br * br / 9. ) ) : 0. ) );
 
-  bdiff = ( gl_FragCoord.xy - beat.xy ) / res.x;
+  /*/bdiff = ( gl_FragCoord.xy - beat.xy ) / res.x;
   bd = sqrt( dot( bdiff, bdiff ) );
   br = beat.w / res.x;
-  UV.y = min( 1., UV.y + beat.z * ( bd < br  ? .5 * exp( -bd * bd / ( 2. * br * br / 9. ) ) : 0. ) );
+  UV.y = min( 1., UV.y + beat.z * ( bd < br  ? .5 * exp( -bd * bd / ( 2. * br * br / 9. ) ) : 0. ) ); //*/
+
+  // FIXME NOT DOING MUCH Glitch: Depends on the noisiness of the spectrum (spectral flatness / tonality coefficient)
+  UV.y = ( rand( p ) + 1. ) * .5 < .001 * sound.w ? 1. : UV.y;
 
   gl_FragColor = vec4( clamp( UV + dUV * dt, 0., 1. ), 0., 1. );
 }
