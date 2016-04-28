@@ -4,14 +4,13 @@
 // 2016 CC BY-NC-ND 4.0
 
 // TODO
-// - Beat Detector class -- encapsulate Beads' beat detection
-// - *** Use SPL to drive dt, centroid to drive dr?
-// - IMPLEMENT YOUR OWN BEAT DETECTOR
+// - REFACTOR -- Box the beat actuation stuff ... and then make Beads go away
+// - IMPLEMENT YOUR OWN BEAT DETECTOR http://mziccard.me/2015/05/28/beats-detection-algorithms-1/
+//   - Use frameRate to calibrate # sample blocks to add to the circular buffer on every call
 // - GLITCH needs to be stateful across per-fragment shader calls -- set a position and a (small) radius, as with beat
 //   Say, every random(6,60) frames, a new center, P, is chosen
 //   Then, in the kernel shader, flatness is used as the coefficient
 //   for some kind of subtle glitch centered on P
-// - Tune dr noise term in grayscott.glsl -- maybe [0,3]?
 // - Tune video convolution
 
 import processing.sound.*;
@@ -34,10 +33,12 @@ int brushRadius = 1<<3;
 // Audio globals
 
 Spectrogram sg;
+Beat beat;
 
 // For actuating beats in the kernel
-PVector beatP;
-float beatIntensity, beatRadius;
+PVector beatP = new PVector( 0., 0. );
+float beatIntensity = 0;
+float beatRadius = 0;
 
 //
 // UI globals
@@ -91,6 +92,7 @@ void setup() {
   sg.getCentroid( true );
     // Make sure we've decomposed the signal at least once,
     // since analysis comes before drawing the spectrogram in draw()
+  beat = new Beat();
 
   // Start the video
   video = new Movie( this, "video/JLT 12 04 2016.mov" );
@@ -111,13 +113,7 @@ void draw() {
     loadDisplayShaders( false ); // only reload the display shader currently in use
   }
 
-  if ( useSound ) {
-    PVector csf = sg.getCentroidSpreadFlatness( ! showSpectrogram );
-    kernel.set( "sound", sg.getSPL( ! showSpectrogram ), csf.x / sg.NYQUIST, csf.y / sg.NYQUIST, csf.z );
-  }
-  else {
-    kernel.set( "sound", .5, .5, 0., .1 );
-  }
+  analyzeAudio();
 
   kernel.set( "kernel", kbuf );
   kernel.set( "time", float( millis() ), frameRate );
@@ -144,8 +140,33 @@ void draw() {
   }
 
   resetShader();
-  if ( showSpectrogram ) sg.draw( 10 );
+  if ( showSpectrogram ) sg.draw( 10, useSound );
   if ( showFramerate ) drawFramerate();
+}
+
+void analyzeAudio() {
+  if ( ! useSound ) {
+    kernel.set( "sound", .5, .5, 0., .1 );
+    kernel.set( "beat", 0., 0., 0., 0. );
+    return;
+  }
+
+  float spl = sg.getSPL( ! showSpectrogram );
+  PVector csf = sg.getCentroidSpreadFlatness( false );
+
+  if ( beat.isOnset() ) {
+    beatIntensity = 1.;
+    beatP.x = random( kbuf.width );
+    beatP.y = random( kbuf.height );
+    beatRadius = random( width / 20., width / 10. );
+  }
+  else {
+    // Exponentional decay -- TODO Tune decay gamma
+    beatIntensity = beatIntensity < .001 ? 0. : beatIntensity / 2.;
+  }
+
+  kernel.set( "sound", spl, csf.x / sg.NYQUIST, csf.y / sg.NYQUIST, csf.z );
+  kernel.set( "beat", beatP.x, beatP.y, beatIntensity, beatRadius );
 }
 
 //

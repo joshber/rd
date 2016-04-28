@@ -8,13 +8,14 @@ import processing.sound.*;
 
 // TODO
 // Experiment with color map -- More darkness in the low end?
+// A-weighting of SPL?
 
 class Spectrogram {
   final float NYQUIST = 22050.;
     // No way to query AudioIn for sample rate, so we assume Fs == 44.1KHz
   final float log10 = log( 10. ); // For converting intensities to dB
 
-  FFT fft;
+  processing.sound.FFT fft;
   final int nbands = 256;
   final float bw = NYQUIST / nbands;
 
@@ -24,7 +25,7 @@ class Spectrogram {
   final int nframes = 60;
 
   color[] colors;
-  color centroidColor, spreadColor;
+  color centroidColor, spreadColor, indicatorColor;
   final int cr = 8; // color resolution, i.e., colors/decibel
   final float alpha = .75;
   final int xstretch = 2;
@@ -39,7 +40,7 @@ class Spectrogram {
 
 
   Spectrogram( PApplet instantiater, AudioIn in ) {
-    fft = new FFT( instantiater, nbands );
+    fft = new processing.sound.FFT( instantiater, nbands );
     fft.input( in );
 
     buildColorMap();
@@ -48,7 +49,7 @@ class Spectrogram {
 
   // Returns the spectral centroid, or 0 if we're not calculating the centroid
   // NB, When spreadp is true, no check to make sure centroidp is too. spread |= centroid
-  float draw( int margin ) {
+  float draw( int margin, boolean indicatorp ) {
     fft.analyze( spectrum );
 
     PVector sc = nocentroid;
@@ -76,6 +77,12 @@ class Spectrogram {
         rect( xoff, yoff, xstretch, 1 );
       }
       ++i;
+    }
+
+    // Draw an indicator strip below the spectrogram, e.g. for “Recording”
+    if ( indicatorp ) {
+      fill( indicatorColor );
+      rect( width - ( nframes * xstretch + margin ), height - margin + 1, nframes * xstretch, 2 );
     }
 
     return sc.x;
@@ -195,6 +202,7 @@ class Spectrogram {
 
     centroidColor = color( 180., 1., 1., 1. ); // CMY cyan, maximum brightness and opacity
     spreadColor = color( 120., 1., 1., 1. ); // RGB green, maximum brightness and opacity
+    indicatorColor = color( 120., 1., 1., 1. );
 
     colors = new color[ 120 * cr + 1 ];
     colors[ 120 * cr ] = color( 0., 0., 1., 0. ); // Transparent, for special cases

@@ -46,7 +46,7 @@ uniform vec4 sound; // (SPL [0,1], centroid [0,1], spread [0,1], flatness [0,1])
 
 // Paintbrushes
 uniform vec4 brush; // ( x, y, intensity, radius )
-//uniform vec4 beat; // ( x, y, intensity, radius )
+uniform vec4 beat; // ( x, y, intensity, radius )
 
 //
 // Noise
@@ -129,16 +129,15 @@ void main() {
   float dr = 2.; // diffusion rate ratio, U:V. Must be ≥2. >2, you get finer detail but it's more static. Keep in [2,10]
   float dt = 2.5; // time step. Keep in [1,4). Above ~4 you get uncontrolled V growth, exposing the whole video
 
-  // The louder and brighter the environment, the faster the simulation runs
-  // sound.x is dB sound intensity for frequencies up to 11KHz, scaled to [0,1]
+  // The louder the environment, the faster the simulation runs. sound.x == db SPL scaled [0,1]
   float dtfloor = 1.;
-  float dtceil = 4.;
-  dt = .5 * ( sound.x + sound.y ) * ( dtceil - dtfloor ) + dtfloor;
+  float dtceil = 5.;
+  dt = sound.x * ( dtceil - dtfloor ) + dtfloor;
   dt *= 60. / time.y; // dt is calibrated for 60fps. Correct for divergence in instantaneous framerate
 
-  // The broader the spectrum (spectral spread), the more local variation in the texture of the pattern
+  // The “brighter” the sound (spectral centroid), the more local variation in the texture of the pattern
   float error = ( rand( p ) + 1. ) * 2.; // random error term in [0,4]
-  dr += sound.z * error;
+  dr += sound.y * error;
 
   // Alternate: The greater the spectral spread, the more local variation in the speed
   // Can lead to rapid extinction
@@ -154,7 +153,7 @@ void main() {
   //dt = p.y * ( dtceil - dtfloor ) + dtfloor;
 
   // Gray-Scott state space parameters
-  vec2 fk = TREERINGSHOLES;
+  vec2 fk = WAVES;
   float feed = fk.x;
   float kill = fk.y;
 
@@ -186,13 +185,14 @@ void main() {
   float br = brush.w / res.x;
   UV.y = min( 1., UV.y + brush.z * ( bd < br  ? .5 * exp( -bd * bd / ( 2. * br * br / 9. ) ) : 0. ) );
 
-  /*/bdiff = ( gl_FragCoord.xy - beat.xy ) / res.x;
+  /*bdiff = ( gl_FragCoord.xy - beat.xy ) / res.x;
   bd = sqrt( dot( bdiff, bdiff ) );
   br = beat.w / res.x;
-  UV.y = min( 1., UV.y + beat.z * ( bd < br  ? .5 * exp( -bd * bd / ( 2. * br * br / 9. ) ) : 0. ) ); //*/
+  UV.y = min( 1., UV.y + beat.z * ( bd < br  ? .5 * exp( -bd * bd / ( 2. * br * br / 9. ) ) : 0. ) );*/
 
-  // FIXME NOT DOING MUCH Glitch: Depends on the noisiness of the spectrum (spectral flatness / tonality coefficient)
-  UV.y = ( rand( p ) + 1. ) * .5 < .001 * sound.w ? 1. : UV.y;
+  // Glitch: Depends on the noisiness of the spectrum (spectral flatness / tonality coefficient)
+  // FIXME Does nothing unless the threshold is ≥ .54 -- WHY?
+  UV.y = ( rand( p ) + 1. ) * .5 < .54 * sound.w ? 1. - UV.y : UV.y;
 
   gl_FragColor = vec4( clamp( UV + dUV * dt, 0., 1. ), 0., 1. );
 }
