@@ -202,7 +202,7 @@ class Spectrogram {
 
     centroidColor = color( 180., 1., 1., 1. ); // CMY cyan, maximum brightness and opacity
     spreadColor = color( 120., 1., 1., 1. ); // RGB green, maximum brightness and opacity
-    indicatorColor = color( 120., 1., 1., 1. );
+    indicatorColor = color( 0., 1., .67, 1. ); // Red
 
     colors = new color[ 120 * cr + 1 ];
     colors[ 120 * cr ] = color( 0., 0., 1., 0. ); // Transparent, for special cases

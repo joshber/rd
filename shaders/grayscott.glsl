@@ -22,18 +22,18 @@ precision mediump int;
 // - https://pmneila.github.io/jsexp/grayscott/
 
 const vec2
-USKATE      = vec2( .062, .061 ), // U-skate world
-SOLITONS    = vec2( .030, .062 ), // Solitons
-PULSOLITONS = vec2( .025, .060 ), // Pulsing solitons
-WORMS       = vec2( .078, .061 ), // Worms
-MAZES       = vec2( .029, .057 ), // Mazes
-HOLES       = vec2( .039, .058 ), // Holes
-TREERINGS   = vec2( .026, .051 ), // Tree rings
-TREERINGSHOLES = vec2( .034, .056 ), // Tree rings + holes
-MOVINGSPOTS = vec2( .014, .054 ), // Moving spots
-SPOTSLOOPS  = vec2( .018, .051 ), // Spots and loops
-WAVES       = vec2( .014, .045 ), // Waves
-VSTEADY     = vec2( .098, .056 ); // V stays steady
+USKATE          = vec2( .062, .061 ), // U-skate world
+SOLITONS        = vec2( .030, .062 ), // Solitons
+PULSOLITONS     = vec2( .025, .060 ), // Pulsing solitons
+WORMS           = vec2( .078, .061 ), // Worms
+MAZES           = vec2( .029, .057 ), // Mazes
+HOLES           = vec2( .039, .058 ), // Holes
+TREERINGS       = vec2( .026, .051 ), // Tree rings
+TREERINGSHOLES  = vec2( .034, .056 ), // Tree rings + holes
+MOVINGSPOTS     = vec2( .014, .054 ), // Moving spots
+SPOTSLOOPS      = vec2( .018, .051 ), // Spots and loops
+WAVES           = vec2( .014, .045 ), // Waves
+VSTEADY         = vec2( .098, .056 ); // V stays steady
 
 uniform sampler2D kernel;
 uniform vec2 res; // kernel dimensions in pixels
@@ -185,13 +185,13 @@ void main() {
   float br = brush.w / res.x;
   UV.y = min( 1., UV.y + brush.z * ( bd < br  ? .5 * exp( -bd * bd / ( 2. * br * br / 9. ) ) : 0. ) );
 
-  /*bdiff = ( gl_FragCoord.xy - beat.xy ) / res.x;
+  bdiff = ( gl_FragCoord.xy - beat.xy ) / res.x;
   bd = sqrt( dot( bdiff, bdiff ) );
   br = beat.w / res.x;
-  UV.y = min( 1., UV.y + beat.z * ( bd < br  ? .5 * exp( -bd * bd / ( 2. * br * br / 9. ) ) : 0. ) );*/
+  UV.y = min( 1., UV.y + beat.z * ( bd < br  ? .5 * exp( -bd * bd / ( 2. * br * br / 9. ) ) : 0. ) );
 
   // Glitch: Depends on the noisiness of the spectrum (spectral flatness / tonality coefficient)
-  // FIXME Does nothing unless the threshold is ≥ .54 -- WHY?
+  // FIXME Does nothing unless the threshold is ≥ .54·sflatness -- why?
   UV.y = ( rand( p ) + 1. ) * .5 < .54 * sound.w ? 1. - UV.y : UV.y;
 
   gl_FragColor = vec4( clamp( UV + dUV * dt, 0., 1. ), 0., 1. );

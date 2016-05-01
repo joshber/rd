@@ -4,9 +4,9 @@
 // 2016 CC BY-NC-ND 4.0
 
 // TODO
+// - *** Pass in SPL 0-11KHz and 11-22KHz as a vec2, and spectral moments separately as a vec3
+//   -- give yourself OPTIONS
 // - REFACTOR -- Box the beat actuation stuff ... and then make Beads go away
-// - IMPLEMENT YOUR OWN BEAT DETECTOR http://mziccard.me/2015/05/28/beats-detection-algorithms-1/
-//   - Use frameRate to calibrate # sample blocks to add to the circular buffer on every call
 // - GLITCH needs to be stateful across per-fragment shader calls -- set a position and a (small) radius, as with beat
 //   Say, every random(6,60) frames, a new center, P, is chosen
 //   Then, in the kernel shader, flatness is used as the coefficient
