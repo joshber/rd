@@ -4,16 +4,12 @@
 // 2016 CC BY-NC-ND 4.0
 
 // TODO
-// - *** Pass in SPL 0-11KHz and 11-22KHz as a vec2, and spectral moments separately as a vec3
-//   -- give yourself OPTIONS
-// - REFACTOR -- Box the beat actuation stuff ... and then make Beads go away
 // - GLITCH needs to be stateful across per-fragment shader calls -- set a position and a (small) radius, as with beat
 //   Say, every random(6,60) frames, a new center, P, is chosen
 //   Then, in the kernel shader, flatness is used as the coefficient
 //   for some kind of subtle glitch centered on P
 // - Tune video convolution
 
-import processing.sound.*;
 import processing.video.*;
 
 //
@@ -33,12 +29,8 @@ int brushRadius = 1<<3;
 // Audio globals
 
 Spectrogram sg;
-Beat beat;
-
-// For actuating beats in the kernel
-PVector beatP = new PVector( 0., 0. );
-float beatIntensity = 0;
-float beatRadius = 0;
+PVector defaultSpl = new PVector( .5, 0. );
+PVector defaultSpectral = new PVector( 0., 0., 0. );
 
 //
 // UI globals
@@ -46,14 +38,14 @@ float beatRadius = 0;
 PFont uiFont;
 final float uiFsize = 12.;
 
+// Does ambient sound influence the R-D process?
+boolean useSound = false;
+
 // What appears in the viewport?
 boolean showVideo = false;
 boolean justVideo = false;
 boolean showSpectrogram = false;
 boolean showFramerate = false;
-
-// Does ambient sound influence the R-D process?
-boolean useSound = false;
 
 
 void setup() {
@@ -76,6 +68,7 @@ void setup() {
 
   // Load shaders
   loadKernelShader();
+  kernel.set( "beat", 0., 0., 0., 0. );
   loadDisplayShaders( true ); // true == load both
 
   // Load UI font
@@ -84,15 +77,10 @@ void setup() {
   textSize( uiFsize );
   textAlign( RIGHT, TOP );
 
-  AudioIn in = new AudioIn( this, 0 );
-  in.start();
-  sg = new Spectrogram( this, in );
+  sg = new Spectrogram( this );
   sg.drawCentroid( true );
   sg.drawSpread( true );
-  sg.getCentroid( true );
-    // Make sure we've decomposed the signal at least once,
-    // since analysis comes before drawing the spectrogram in draw()
-  beat = new Beat();
+  //sg.setThreshold( .8 );
 
   // Start the video
   video = new Movie( this, "video/JLT 12 04 2016.mov" );
@@ -105,7 +93,7 @@ void draw() {
   int fc = frameCount % 120;
   if ( fc == 60 ) {
     loadKernelShader();
-    sg.getCentroid( true );
+    sg.getCentroid( true ); // FIXME GET RID OF THIS!
       // TODO: For reasons unclear, we need to reprime the FFT after reloading the shader,
       // otherwise it drops a frame and V goes to extinction in the kernel
   }
@@ -113,10 +101,26 @@ void draw() {
     loadDisplayShaders( false ); // only reload the display shader currently in use
   }
 
-  analyzeAudio();
+  float time = float( millis() );
+  kernel.set( "time", time, frameRate );
+
+  PVector spl = defaultSpl;
+  PVector spectral = defaultSpectral;
+  if ( useSound ) {
+    // Beat actuation: Random location and radius, intensity governed by exponential decay (in the shader)
+    if ( sg.isOnset() ) {
+      float x = random( kbuf.width );
+      float y = random( kbuf.height );
+      float radius = random( width / 20., width / 10. );
+      kernel.set( "beat", x, y, radius, time );
+    }
+    spl = sg.getSPL();
+    spectral = sg.getCentroidSpreadFlatness();
+  }
+  kernel.set( "spl", spl.x, spl.y );
+  kernel.set( "spectral", spectral.x / sg.NYQUIST, spectral.y / sg.NYQUIST, spectral.z );
 
   kernel.set( "kernel", kbuf );
-  kernel.set( "time", float( millis() ), frameRate );
   kernel.set( "brush", float( mouseX / kscale ), float( ( height - mouseY ) / kscale ), brushIntensity, brushRadius );
     // height - mouseY: Processing's y-axis is inverted wrt GLSL's
 
@@ -142,31 +146,6 @@ void draw() {
   resetShader();
   if ( showSpectrogram ) sg.draw( 10, useSound );
   if ( showFramerate ) drawFramerate();
-}
-
-void analyzeAudio() {
-  if ( ! useSound ) {
-    kernel.set( "sound", .5, .5, 0., .1 );
-    kernel.set( "beat", 0., 0., 0., 0. );
-    return;
-  }
-
-  float spl = sg.getSPL( ! showSpectrogram );
-  PVector csf = sg.getCentroidSpreadFlatness( false );
-
-  if ( beat.isOnset() ) {
-    beatIntensity = 1.;
-    beatP.x = random( kbuf.width );
-    beatP.y = random( kbuf.height );
-    beatRadius = random( width / 20., width / 10. );
-  }
-  else {
-    // Exponentional decay -- TODO Tune decay gamma
-    beatIntensity = beatIntensity < .001 ? 0. : beatIntensity / 2.;
-  }
-
-  kernel.set( "sound", spl, csf.x / sg.NYQUIST, csf.y / sg.NYQUIST, csf.z );
-  kernel.set( "beat", beatP.x, beatP.y, beatIntensity, beatRadius );
 }
 
 //
@@ -243,11 +222,11 @@ void keyPressed() {
   if ( key == 's' ) {
     useSound = ! useSound;
   }
-  else if ( '1' <= key && key <= '2' ) {
-    frameRate( 10 * ( int( key ) - int( '0' ) ) );
+  else if ( '1' <= key && key <= '9' ) {
+    sg.setThreshold( .1 * ( int( key ) - int( '0' ) ) );
   }
   else if ( key == ' ' ) {
-    frameRate( fr );
+    sg.resetThresholds();
   }
   else if ( 'a' <= key && key <= 'f' ) {
     brushRadius = 1 << ( int( key ) - int( 'a' ) + 1 );

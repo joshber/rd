@@ -41,12 +41,12 @@ uniform vec2 res; // kernel dimensions in pixels
 uniform vec2 time; // (running time in ms, instantaneous framerate in fps)
 
 // Audio signal features
-uniform vec4 sound; // (SPL [0,1], centroid [0,1], spread [0,1], flatness [0,1])
-  // NB, SPL dB scaled to [0,1], i.e., 60dB is .5, 120dB 1.0
+uniform vec2 spl; // Sound pressure level in dB, scaled to [0,1]. x:0–11KHz y:11–22KHz
+uniform vec3 spectral; // Spectral moments. x:centroid y:spread z:flatness, all [0,1]
+uniform vec4 beat; // ( x, y, radius, time of onset in ms )
 
-// Paintbrushes
+// Paintbrush
 uniform vec4 brush; // ( x, y, intensity, radius )
-uniform vec4 beat; // ( x, y, intensity, radius )
 
 //
 // Noise
@@ -129,20 +129,20 @@ void main() {
   float dr = 2.; // diffusion rate ratio, U:V. Must be ≥2. >2, you get finer detail but it's more static. Keep in [2,10]
   float dt = 2.5; // time step. Keep in [1,4). Above ~4 you get uncontrolled V growth, exposing the whole video
 
-  // The louder the environment, the faster the simulation runs. sound.x == db SPL scaled [0,1]
+  // The louder the environment, the faster the simulation runs. spl.x == db SPL 0–11KHz scaled [0,1]
   float dtfloor = 1.;
-  float dtceil = 5.;
-  dt = sound.x * ( dtceil - dtfloor ) + dtfloor;
+  float dtceil = 4.;
+  dt = ( spl.x + spl.y ) * ( dtceil - dtfloor ) + dtfloor;
   dt *= 60. / time.y; // dt is calibrated for 60fps. Correct for divergence in instantaneous framerate
 
   // The “brighter” the sound (spectral centroid), the more local variation in the texture of the pattern
-  float error = ( rand( p ) + 1. ) * 2.; // random error term in [0,4]
-  dr += sound.y * error;
+  float error = ( rand( p ) + 1. ) * 4.; // random error term in [0,8]
+  dr += spectral.x * error;
 
   // Alternate: The greater the spectral spread, the more local variation in the speed
   // Can lead to rapid extinction
   //float error = rand( p );
-  //dt += sound.z * error;
+  //dt += spectral.y * error;
 
   // dr and dt gradients -- systematically profile effects of different values
   //float drfloor = 2.;
@@ -187,12 +187,13 @@ void main() {
 
   bdiff = ( gl_FragCoord.xy - beat.xy ) / res.x;
   bd = sqrt( dot( bdiff, bdiff ) );
-  br = beat.w / res.x;
-  UV.y = min( 1., UV.y + beat.z * ( bd < br  ? .5 * exp( -bd * bd / ( 2. * br * br / 9. ) ) : 0. ) );
+  br = beat.z / res.x;
+  float intensity = 1. / exp( ( time.x - beat.w ) / 20. ); // Exponential decay -- 20ms is an adjusted frame period
+  UV.y = min( 1., UV.y + intensity * ( bd < br  ? .5 * exp( -bd * bd / ( 2. * br * br / 9. ) ) : 0. ) );
 
   // Glitch: Depends on the noisiness of the spectrum (spectral flatness / tonality coefficient)
   // FIXME Does nothing unless the threshold is ≥ .54·sflatness -- why?
-  UV.y = ( rand( p ) + 1. ) * .5 < .54 * sound.w ? 1. - UV.y : UV.y;
+  UV.y = ( rand( p ) + 1. ) * .5 < .54 * spectral.z ? 1. - UV.y : UV.y;
 
   gl_FragColor = vec4( clamp( UV + dUV * dt, 0., 1. ), 0., 1. );
 }

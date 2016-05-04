@@ -8,7 +8,33 @@ import processing.sound.*;
 
 // TODO
 // Experiment with color map -- More darkness in the low end?
-// A-weighting of SPL?
+// SPL: A-weighting?
+
+
+class SpectrogramFFTLoop implements Runnable {
+  Spectrogram sg;
+
+  SpectrogramFFTLoop( Spectrogram invoker ) {
+    sg = invoker;
+  }
+
+  public void run() {
+    try {
+      while ( true ) {
+        if ( sg.isPaused() ) return;
+
+        sg.computeFrame();
+
+        Thread.sleep( 10 ); // Aiming for 60fps
+          // If it's too close to Animation thread frame rate (i.e., sleep( 17 ))
+          // you get aliasing in the form of judder in the spectrogram animation
+      }
+    }
+    catch ( InterruptedException e ) {
+      println( "SpectrogramFFTLoop interrupted: " + e );
+    }
+  }
+}
 
 class Spectrogram {
   final float NYQUIST = 22050.;
@@ -20,9 +46,14 @@ class Spectrogram {
   final float bw = NYQUIST / nbands;
 
   float[] spectrum = new float[ nbands ];
+  float[] prevSpectrum = new float[ nbands ];
 
+  // Spectrogram
   ArrayDeque<color[]> sg;
   final int nframes = 60;
+
+  //
+  // Color mapping
 
   color[] colors;
   color centroidColor, spreadColor, indicatorColor;
@@ -30,26 +61,84 @@ class Spectrogram {
   final float alpha = .75;
   final int xstretch = 2;
 
+  //
+  // Spectrogram options
+
   boolean centroidp = false;
   boolean spreadp = false;
 
-  // Avoid consing PVectors unnecessarily -- see draw() and spread()
-  // NB, heycentroid is not threadsafe
+  // Avoid consing PVectors unnecessarily -- see computeFrame(), draw() and spread()
+  // NB, heycentroid and spl are not threadsafe
   final PVector nocentroid = new PVector( 0., 1. );
-  final PVector heycentroid = new PVector( 0., 0. );
+  final PVector heycentroid = new PVector( 0., 1. );
+  final PVector spl = new PVector( 0., 0. );
+
+  //
+  // Spectral flux (for beat detection)
+
+  ArrayDeque<float[]> flux;
+  final int sfpulse = 13;
+    // Spectral flux pulse width: How many sample frames do we need to detect an onset?
+    // Radius of [-9,3], so 13 frames altogether
+    // Less expensive than methods that require taking variance over 500–1000ms of flux
+
+  // For quick traversal in isOnset()
+  float[] fluxary = new float[ sfpulse ];
+
+  float threshold;
+  float alphaThreshold;
+  float gAlpha;
+    // Second threshold function (see isOnset() ): g(n) = max( SF(n), alpha·g(n - 1) + (1 - alpha)·SF(n) )
+
+  //
+  // Background threading
+
+  Thread fftThread;
+  boolean paused;
 
 
-  Spectrogram( PApplet instantiater, AudioIn in ) {
+  Spectrogram( PApplet instantiater ) {
+    AudioIn in = new AudioIn( instantiater, 0 );
+    in.start();
+
     fft = new processing.sound.FFT( instantiater, nbands );
     fft.input( in );
 
     buildColorMap();
-    zeroOutSgQueue();
+    initializeSgQueue();
+    initializeFluxQueue();
+    resetThresholds();
+
+    start();
   }
 
-  // Returns the spectral centroid, or 0 if we're not calculating the centroid
-  // NB, When spreadp is true, no check to make sure centroidp is too. spread |= centroid
-  float draw( int margin, boolean indicatorp ) {
+  //
+  // Handle background threading
+
+  void start() {
+    fftThread = new Thread( new SpectrogramFFTLoop( this ), "Spectrogram FFT Thread" );
+    restart();
+  }
+  void restart() {
+    paused = false;
+    fftThread.start();
+  }
+  void pause() {
+    paused = true;
+  }
+  boolean isPaused() {
+    return paused;
+  }
+
+  //
+  // Analysis
+
+  // computeFrame: Computes one new frame of the plot
+  // Updates the centroid measure if centroidp == true
+  // Tail-calls computeFlux()
+  // NB, When spreadp is true, no check to make sure centroidp is too. spread |= centroid,
+  // so spreadp && !centroidp yields unreliable results for spread
+  synchronized void computeFrame() {
     fft.analyze( spectrum );
 
     PVector sc = nocentroid;
@@ -68,6 +157,44 @@ class Spectrogram {
     sg.remove(); // Remove the oldest frame
     sg.add( frame );
 
+    heycentroid.x = sc.x;
+    heycentroid.y = sc.y;
+
+    computeFlux();
+  }
+
+  // computeFlux: Computes one frame of spectral flux
+  synchronized void computeFlux() {
+    float accum = 0.;
+    for ( int k = 0 ; k < nbands ; ++k ) {
+      float fk = spectrum[ k ];
+      float diff = fk - prevSpectrum[ k ];
+      diff = .5 * ( diff + abs( diff ) ); // Half-wave rectifier
+      accum += diff;
+      prevSpectrum[ k ] = fk; // X(n) becomes the comparandum for X(n+1)
+    }
+
+    // Normalize spectral flux to a Gaussian with mean 0, sd 1, clamped to six sigma
+    accum = clamp( exp( accum * accum / 4. ), -6., 6. );
+
+    // Add a frame to the running average
+    float[] frame = new float[ 1 ];
+    frame[ 0 ] = accum;
+    flux.remove();
+    flux.add( frame );
+  }
+
+  //
+  // Draw the spectrogram!
+  // Returns the spectral centroid, or 0 if we're not calculating the centroid
+
+  synchronized float draw( int margin ) {
+    return draw( margin, false );
+  }
+  synchronized float draw( int margin, boolean indicatorp ) {
+    if ( isPaused() )
+      return 0.;
+
     int i = 0;
     for ( int[] f : sg ) {
       float xoff = width - ( nframes * xstretch + margin ) + i * xstretch; // Draw from the left
@@ -85,8 +212,11 @@ class Spectrogram {
       rect( width - ( nframes * xstretch + margin ), height - margin + 1, nframes * xstretch, 2 );
     }
 
-    return sc.x;
+    return heycentroid.x; // heycentroid gets set in computeFrame()
   }
+
+  //
+  // Central moments and other heuristic measures
 
   // Spectral centroid
   // Returns a PVector so we can reuse the denominator if we're also calculating spectral spread
@@ -138,58 +268,120 @@ class Spectrogram {
   }
 
   //
-  // Central moments and other heuristic measures
+  // Public-facing accessors for central moments, spectral flatness, and SPL
 
-  float getCentroid( boolean reanalyze ) {
+  synchronized float getCentroid( boolean reanalyze ) {
     if ( reanalyze )
       fft.analyze( spectrum );
     return centroid().x;
   }
-  float getCentroid() {
-    return getCentroid( true );
+  synchronized float getCentroid() {
+    return getCentroid( paused );
   }
 
-  float getSpread( boolean reanalyze ) {
+  synchronized float getSpread( boolean reanalyze ) {
     if ( reanalyze )
       fft.analyze( spectrum );
     return spread( centroid() );
   }
-  float getSpread() {
-    return getSpread( true );
+  synchronized float getSpread() {
+    return getSpread( paused );
   }
 
-  float getFlatness( boolean reanalyze ) {
+  synchronized float getFlatness( boolean reanalyze ) {
     if ( reanalyze )
       fft.analyze( spectrum );
     return flatness();
   }
-  float getFlatness() {
-    return getFlatness( true );
+  synchronized float getFlatness() {
+    return getFlatness( paused );
   }
 
-  PVector getCentroidSpreadFlatness( boolean reanalyze ) {
+  synchronized PVector getCentroidSpreadFlatness( boolean reanalyze ) {
     if ( reanalyze )
       fft.analyze( spectrum );
     PVector sc = centroid();
     return new PVector( sc.x, spread( sc ), flatness( sc.y ) );
   }
-  PVector getCentroidSpreadFlatness() {
-    return getCentroidSpreadFlatness( true );
+  synchronized PVector getCentroidSpreadFlatness() {
+    return getCentroidSpreadFlatness( paused );
   }
 
   // Sound pressure level in dB, scaled to [0,1]
-  // TODO: Check correctness
-  float getSPL( boolean reanalyze ) {
+  // Returns a PVector with SPL for low and high ranges (i.e., [0,11KHz),(11,22KHz] )
+  synchronized PVector getSPL( boolean reanalyze ) {
     if ( reanalyze )
       fft.analyze( spectrum );
-    float spl = 0.;
-    for ( int k = 0 ; k < nbands ; ++k ) {
-      spl += log( spectrum[ k ] / 1e-10 ) / log10;
+
+    float lo = 0.;
+    float hi = 0.;
+    int k;
+    for ( k = 0 ; k < nbands / 2 ; ++k ) {
+      lo += log( spectrum[ k ] / 1e-10 ) / log10;
+      hi += log( spectrum[ k * 2 ] / 1e-10 ) / log10;
     }
-    return spl / ( 12. * nbands ); // /12: rescaling Bels to [0,1]
+
+    // /12: rescaling Bels to [0,1]
+    spl.x = lo / ( 12. * nbands );
+    spl.y = hi / ( 12. * nbands );
+    return spl;
   }
-  float getSPL() {
-    return getSPL( true );
+  synchronized PVector getSPL() {
+    return getSPL( paused );
+  }
+
+  // isOnset: Implements spectral flux onset algorithm from
+  // Dixon S 2006 Onset detection revisited. Proc 9th Int Conf on Digital Audio Effects
+  // http://www.dafx.ca/proceedings/papers/p_133.pdf
+  synchronized boolean isOnset() {
+    final int r = 3; // Radius of local maximum search
+    final int m = 3; // Attack radius multiplier for mean calculation
+
+    // Copy the buffer to an array for fast dereferences
+    int i = 0;
+    for ( float[] f : flux ) {
+      fluxary[ i++ ] = f[ 0 ];
+    }
+
+    // f: Index of the sample frame we're testing to see if it's an onset
+    int f = r * m; // f = rm: We need space at the front for the attack radius averaging
+
+    boolean onsetp = true;
+
+    float accum = 0.;
+    float sf = fluxary[ f ];
+
+    // Three tests to see if frame f is an onset
+    // All must be satisfied
+
+    // 1. Compare SF(f) to SF([f - r, f + r])
+    //    On the side, accumulate SF([f - rm, f + r]) for test 2
+    for ( i = f - r * m ; i <= r ; ++i ) {
+      float cmp = fluxary[ i ];
+      if ( i >= -r && sf < cmp ) { // SF(f) ≥ SF([f - r, f + r ])
+        onsetp = false;
+        break;
+      }
+      accum += fluxary[ i ];
+    }
+
+    // 2. If SF(f) passed test 1, compare it to the mean of SF([f - rm, f + r])
+    if ( onsetp ) {
+      float mean = accum / ( m * r + r + 1. );
+      if ( sf < mean + threshold ) {
+        onsetp = false;
+      }
+    }
+
+    // 3. If SF(f) passed test 2, compare it to gAlpha
+    if ( onsetp && sf < gAlpha ) {
+      onsetp = false;
+    }
+
+    // Update gAlpha
+    gAlpha = max( sf, alphaThreshold * gAlpha + ( 1. - alphaThreshold ) * sf );
+
+    return onsetp;
   }
 
   //
@@ -202,7 +394,7 @@ class Spectrogram {
 
     centroidColor = color( 180., 1., 1., 1. ); // CMY cyan, maximum brightness and opacity
     spreadColor = color( 120., 1., 1., 1. ); // RGB green, maximum brightness and opacity
-    indicatorColor = color( 0., 1., .67, 1. ); // Red
+    indicatorColor = color( 0., 0., .8, 1. ); // Bright gray
 
     colors = new color[ 120 * cr + 1 ];
     colors[ 120 * cr ] = color( 0., 0., 1., 0. ); // Transparent, for special cases
@@ -211,9 +403,8 @@ class Spectrogram {
     popStyle();
   }
 
-  // Darker at the low end than previously
+  // Inspiration: https://en.wikipedia.org/wiki/Spectrogram#/media/File:Spectrogram-19thC.png
   void colorMapA() {
-    // https://en.wikipedia.org/wiki/Spectrogram#/media/File:Spectrogram-19thC.png
     int i;
 
     // < 20dB: Black
@@ -240,14 +431,29 @@ class Spectrogram {
       colors[ i ] = color( 0., 0., 1., alpha );
   }
 
-  void zeroOutSgQueue() {
+  void initializeSgQueue() {
     sg = new ArrayDeque<color[]>( nframes );
-    for ( int i = 0 ; i < nframes ; ++i ) {
+    for ( int f = 0 ; f < nframes ; ++f ) {
       color[] frame = new color[ nbands ];
-      for ( int j = 0 ; j < nbands ; ++ j ) {
-        frame[ j ] = colors[ 120 * cr ]; // transparent
+      for ( int k = 0 ; k < nbands ; ++k ) {
+        frame[ k ] = colors[ 120 * cr ]; // transparent
       }
       sg.add( frame );
+    }
+  }
+
+  void initializeFluxQueue() {
+    // Zero out X(n - 1) so we have a basis for comparison to start with
+    for ( int k = 0 ; k < nbands ; ++k ) {
+      prevSpectrum[ k ] = 0.;
+    }
+
+    // Initialize with 1s so we don't mistakenly register an onset as soon as the signal starts
+    flux = new ArrayDeque<float[]>( sfpulse );
+    for ( int f = 0 ; f < sfpulse ; ++f ) {
+      float[] frame = new float[ 1 ];
+      frame[ 0 ] = 1.;
+      flux.add( frame );
     }
   }
 
@@ -266,5 +472,24 @@ class Spectrogram {
   }
   void drawSpread( boolean p ) {
     spreadp = p;
+  }
+
+  void setThreshold( float t ) {
+    threshold = t > 0 ? t : threshold;
+  }
+  void setAlpha( float a ) {
+    alphaThreshold = a > 0 ? a : alphaThreshold;
+  }
+  void setThresholds( float t, float a ) {
+    threshold = t > 0 ? t : threshold;
+    alphaThreshold = a > 0 ? a : alphaThreshold;
+  }
+  void resetThresholds() {
+    threshold = .9;
+    alphaThreshold = .2;
+    gAlpha = 1.; // Starting at zero, we rapidly get to a point where nothing counts as an onset
+  }
+  PVector getThresholds() {
+    return new PVector( threshold, alphaThreshold );
   }
 }

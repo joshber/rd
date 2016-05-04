@@ -53,7 +53,7 @@ void main() {
   float hceil = 1.;
   float sfloor = .5;
   float sceil = 1.;
-  float bfloor = .3;
+  float bfloor = .2;
   float bceil = 1.;
 
   vec3 c;
