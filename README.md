@@ -12,6 +12,6 @@ It is intended for large-scale multichannel installation. At a future point, mul
 
 Inspiration comes from the work of [Mark IJzerman](http://markijzerman.com/).
 
-![screenshot](https://github.com/joshber/rd/blob/master/screenshots/screen0.png)
-![screenshot](https://github.com/joshber/rd/blob/master/screenshots/screen1.png)
-![screenshot](https://github.com/joshber/rd/blob/master/screenshots/screen2.png)
+![screenshot](https://github.com/joshber/rd/blob/master/screenshots/screen0.jpg)
+![screenshot](https://github.com/joshber/rd/blob/master/screenshots/screen1.jpg)
+![screenshot](https://github.com/joshber/rd/blob/master/screenshots/screen2.jpg)
