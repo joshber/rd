@@ -4,11 +4,18 @@
 // 2016 CC BY-NC-ND 4.0
 
 // TODO
+// - ZMQ with JeroMQ jar. What should be transmitted among instances?
+//    - First, wrap the whole thing in a class with a Runnable helper checking for incoming messages in the background
+//      and triggering a callback when one arrives -- or not a callback, just queuing new messages -- on each draw(),
+//      we check the queue. Background message-handling thread culls messages older than T from the queue
+//    - Spectral flux onsets, with time since Epoch -- Can we make SF scalar?
+//    - SPL and spectral moments?
+//    - Some kind of phase information? How could we meaningfully define phase? In the RD model? In ambient sound?
 // - GLITCH needs to be stateful across per-fragment shader calls -- set a position and a (small) radius, as with beat
 //   Say, every random(6,60) frames, a new center, P, is chosen
 //   Then, in the kernel shader, flatness is used as the coefficient
 //   for some kind of subtle glitch centered on P
-// - Tune video convolution
+// - Experiment with different modes of video convolution
 
 import processing.video.*;
 
@@ -246,6 +253,9 @@ void keyPressed() {
   }
   else if ( key == 'p' ) {
     showFramerate = ! showFramerate;
+  }
+  else if ( key == 'q' ) {
+    exit();
   }
 }
 

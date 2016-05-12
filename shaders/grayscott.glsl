@@ -153,7 +153,7 @@ void main() {
   //dt = p.y * ( dtceil - dtfloor ) + dtfloor;
 
   // Gray-Scott state space parameters
-  vec2 fk = WAVES;
+  vec2 fk = TREERINGS;
   float feed = fk.x;
   float kill = fk.y;
 

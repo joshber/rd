@@ -7,6 +7,11 @@ import java.util.*; // ArrayDeque
 import processing.sound.*;
 
 // TODO
+// Spectral flux onset recognition still dies out -- current fix is a kludge
+// - Is implementation of g correct?
+// - Is implementation of Gaussian normalization correct?
+// - Check Beads implementation
+// - TRY DIFFERENT DEFAULT ALPHA (.9?)
 // Experiment with color map -- More darkness in the low end?
 // SPL: A-weighting?
 
@@ -41,7 +46,7 @@ class Spectrogram {
     // No way to query AudioIn for sample rate, so we assume Fs == 44.1KHz
   final float log10 = log( 10. ); // For converting intensities to dB
 
-  processing.sound.FFT fft;
+  FFT fft;
   final int nbands = 256;
   final float bw = NYQUIST / nbands;
 
@@ -101,7 +106,7 @@ class Spectrogram {
     AudioIn in = new AudioIn( instantiater, 0 );
     in.start();
 
-    fft = new processing.sound.FFT( instantiater, nbands );
+    fft = new FFT( instantiater, nbands );
     fft.input( in );
 
     buildColorMap();
@@ -380,6 +385,10 @@ class Spectrogram {
 
     // Update gAlpha
     gAlpha = max( sf, alphaThreshold * gAlpha + ( 1. - alphaThreshold ) * sf );
+    if ( Float.isInfinite( gAlpha ) || Float.isNaN( gAlpha ) )
+      gAlpha = 1.;
+      // TODO: Kludge to keep onset detection from getting extinguished
+      // Not clear why it still happens now that spectral flux values are clamped
 
     return onsetp;
   }
@@ -415,7 +424,7 @@ class Spectrogram {
     for ( ; i < 40 * cr ; ++i )
       colors[ i ] = color( 240., 1., ( i - 20 * cr - 1 ) / ( 20. * cr ), alpha );
 
-    // 40–89dB: Rotate from blue to yellow, maintaing full brightness
+    // 40–89dB: Rotate from blue to yellow via red, maintaing full brightness
     for ( ; i < 90 * cr ; ++i )
       colors[ i ] = color( int( 240 + 180 * ( i - 40 * cr - 1 ) / ( 50. * cr ) ) % 360, 1., 1., alpha );
       // int( 240 + 180 * ( i - 40 * cr ) / ( 50. * cr ) ) % 360:
@@ -448,7 +457,7 @@ class Spectrogram {
       prevSpectrum[ k ] = 0.;
     }
 
-    // Initialize with 1s so we don't mistakenly register an onset as soon as the signal starts
+    // Initialize with 1s (+1sd) so we don't mistakenly register an onset as soon as the signal starts
     flux = new ArrayDeque<float[]>( sfpulse );
     for ( int f = 0 ; f < sfpulse ; ++f ) {
       float[] frame = new float[ 1 ];
@@ -487,7 +496,9 @@ class Spectrogram {
   void resetThresholds() {
     threshold = .9;
     alphaThreshold = .2;
-    gAlpha = 1.; // Starting at zero, we rapidly get to a point where nothing counts as an onset
+    gAlpha = 1.;
+      // Now that we clamp the Gaussian spectral flux, initial value should not matter so much
+      // But setting it to 1 helps guard against false positives in the first frames
   }
   PVector getThresholds() {
     return new PVector( threshold, alphaThreshold );
