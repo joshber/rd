@@ -7,10 +7,8 @@ import java.util.*; // ArrayDeque
 import processing.sound.*;
 
 // TODO
-// Spectral flux onset recognition still dies out -- current fix is a kludge
+// Spectral flux onset recognition needs further burn-in
 // - Is implementation of g correct?
-// - Is implementation of Gaussian normalization correct?
-// - Check Beads implementation
 // - TRY DIFFERENT DEFAULT ALPHA (.9?)
 // Experiment with color map -- More darkness in the low end?
 // SPL: A-weighting?
